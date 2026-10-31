@@ -13,7 +13,7 @@ internal sealed class BackendContext : ApplicationContext
     private readonly GameBridge bridge;
     private readonly SteamSession steam;
     private readonly AutoUpdater updater;
-    private readonly System.Windows.Forms.Timer timer = new() { Interval = 33 };
+    private readonly StaPulse timer;
     private List<MapEntry> maps = [];
     private string requestSeen = "", lastError = "";
     private long lastUi, lastProcessSeen = Environment.TickCount64, lastUpdateCheck = Environment.TickCount64;
@@ -42,8 +42,8 @@ internal sealed class BackendContext : ApplicationContext
             VerifyGame();
             Process.Start(new ProcessStartInfo(Path.Combine(settings.GameFolder, "RCDriftSim.exe")) { WorkingDirectory = settings.GameFolder, UseShellExecute = true });
         }
-        timer.Tick += (_, _) => Tick(); timer.Start();
-        Application.ApplicationExit += (_, _) => { timer.Stop(); steam.Dispose(); bridge.WriteRemotes([]); };
+        timer = new StaPulse(Tick);
+        Application.ApplicationExit += (_, _) => { timer.Dispose(); steam.Dispose(); bridge.WriteRemotes([]); };
     }
     private string[]? ReadRequest()
     {
@@ -156,7 +156,7 @@ internal sealed class BackendContext : ApplicationContext
     {
         static string Clean(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var status = lastError.Length > 0 ? lastError : steam.Connected ? steam.Status : "Ready. Host or join to connect Steam.";
-        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.3\n");
+        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.4\n");
         text.Append("browser\t").Append(Clean(steam.Browser?.Status ?? "Refresh to find Steam lobbies")).Append('\n');
         foreach (var listing in steam.Browser?.Listings ?? [])
             text.Append("lobby\t").Append(listing.Id).Append('\t').Append(Clean($"{listing.Access} | {listing.Name} | {listing.Map} | {listing.Players}/{listing.Capacity}"))
@@ -169,5 +169,5 @@ internal sealed class BackendContext : ApplicationContext
         try { File.WriteAllText(path + ".tmp", text.ToString(), new UTF8Encoding(false)); File.Move(path + ".tmp", path, true); }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
     }
-    protected override void ExitThreadCore() { timer.Stop(); steam.Dispose(); bridge.WriteRemotes([]); base.ExitThreadCore(); }
+    protected override void ExitThreadCore() { timer.Dispose(); steam.Dispose(); bridge.WriteRemotes([]); base.ExitThreadCore(); }
 }

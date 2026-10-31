@@ -39,10 +39,17 @@ local function transform(mathLib,source,parent)
     local r=mathLib:TransformRotation(relative,{Pitch=0,Yaw=0,Roll=0})
     return {p.X,p.Y,p.Z,r.Pitch,r.Yaw,r.Roll}
 end
-function M.capture(pawn,each,animation,adapter,mathLib,run,serial,previous)
+function M.capture(pawn,each,animation,adapter,mathLib,run,serial,previous,now)
     local sources={}
-    each(pawn,"StaticMeshComponent",function(source)
-        if source.bHiddenInGame or not source.bVisible or not asset(source.StaticMesh) then return end
+    for _,source in ipairs(adapter.visualSources or {}) do if not valid(source) then adapter.nextVisualScan=0; break end end
+    if not adapter.visualSources or (now or 0)>=(adapter.nextVisualScan or 0) then
+        adapter.visualSources={}
+        each(pawn,"StaticMeshComponent",function(source) adapter.visualSources[#adapter.visualSources+1]=source end)
+        adapter.nextVisualScan=(now or 0)+5
+    end
+    for _,source in ipairs(adapter.visualSources) do
+    if valid(source) then
+        if not source.bHiddenInGame and source.bVisible and asset(source.StaticMesh) then
         local ancestor,onCar=source,false
         for _=1,20 do
             if not valid(ancestor) then break end
@@ -50,17 +57,28 @@ function M.capture(pawn,each,animation,adapter,mathLib,run,serial,previous)
             ancestor=ancestor:GetAttachParent()
         end
         if onCar then sources[#sources+1]=source end
-    end)
+        end
+    end
+    end
     table.sort(sources,function(a,b) return name(a)<name(b) end)
-    local signature,parts={},{}
+    local signature,parts,materialCache={},{},{}
     for index,source in ipairs(sources) do
         if index>160 then break end
         local key=animation.key(source) or 0
         local part={source=source,key=key,materials={}}
-        local scale=source:K2_GetComponentScale()
-        signature[#signature+1]=name(source).."\t"..asset(source.StaticMesh).."\t"..key.."\t"..numbers({scale.X,scale.Y,scale.Z})
+        local componentName=name(source)
+        local scaleSignature=""
+        -- Suspension links and springs change scale during driving; that is motion,
+        -- not a new outfit. Only user-customizable body/wheel scale affects identity.
+        if componentName=="OptionalBodyShell" or componentName:match("^RimDisplay") or componentName:match("^TireDisplay") then
+            local scale=source:K2_GetComponentScale(); scaleSignature=numbers({scale.X,scale.Y,scale.Z})
+        end
+        signature[#signature+1]=componentName.."\t"..asset(source.StaticMesh).."\t"..key.."\t"..scaleSignature
         for slot=0,math.min(source:GetNumMaterials(),8)-1 do
-            local m=material(source:GetMaterial(slot))
+            local sourceMaterial=source:GetMaterial(slot)
+            local address=valid(sourceMaterial) and tostring(sourceMaterial:GetAddress()) or "invalid"
+            local m=materialCache[address]
+            if m==nil then m=material(sourceMaterial) or false; materialCache[address]=m end
             if m then
                 local lines={"m\t"..index.."\t"..slot.."\t"..m.asset}
                 for j,n in ipairs(ordered(m.scalars)) do if j<=8 then lines[#lines+1]="s\t"..index.."\t"..slot.."\t"..n.."\t"..numbers({m.scalars[n]}) end end
@@ -146,6 +164,10 @@ function M.create(pawn,parts,group,mathLib)
                 local target=actor.StaticMeshComponent
                 target:SetMobility(2); target:SetCollisionEnabled(0); target:SetSimulatePhysics(false); actor:SetActorEnableCollision(false)
                 target:SetStaticMesh(mesh)
+                if valid(group.root) then
+                    assert(actor:K2_AttachToActor(group.root,FName("None"),1,1,1,false),"Could not attach remote visual")
+                    actor:K2_SetActorRelativeTransform(relative,false,{},true)
+                end
                 for slot,m in pairs(definition.materials) do
                     local base=m.loadedBase
                     if valid(base) then

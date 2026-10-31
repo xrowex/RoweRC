@@ -13,7 +13,7 @@ public sealed record PendingUpdate(string GameFolder, string Package, string Fee
 
 public sealed class AutoUpdater
 {
-    public const string CurrentVersion = "0.1.3";
+    public const string CurrentVersion = "0.1.4";
     public const string DefaultFeed = "https://github.com/xrowex/RoweRC/releases/latest/download/update.json";
     private readonly string gameFolder, feedUrl;
     private readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RoweRC", "updates");

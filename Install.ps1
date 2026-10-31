@@ -46,6 +46,6 @@ foreach ($f in $incoming) {
     }
     $files[$f.Relative] = (Get-FileHash -LiteralPath $f.Target).Hash.ToLowerInvariant()
 }
-@{Version='0.1.3-experimental'; GameBuild='3c46a39f90'; InstalledUtc=[DateTime]::UtcNow.ToString('o'); Files=$files} |
+@{Version='0.1.4-experimental'; GameBuild='3c46a39f90'; InstalledUtc=[DateTime]::UtcNow.ToString('o'); Files=$files} |
     ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $receiptPath -Encoding utf8
 Write-Output 'RoweRC installed. Launch RC Tandems normally and press F8 for Friends + Maps.'

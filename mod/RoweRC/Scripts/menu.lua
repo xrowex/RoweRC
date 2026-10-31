@@ -119,7 +119,7 @@ function UI.Open()
     local scroll = make("ScrollBox"); border:SetContent(scroll)
     local box = make("VerticalBox"); scroll:AddChild(box)
     add(box, label("ROWE RC  /  FRIENDS + MAPS", 24))
-    add(box, label("RoweRC 0.1.3  /  F8 closes  /  Steam development App ID 480", 12))
+    add(box, label("RoweRC 0.1.4  /  F8 closes  /  Steam development App ID 480", 12))
     statusLabel = add(box, label("Waiting for Steam helper...", 13))
     add(box, label("STEAM LOBBY BROWSER",18))
     browserLabel=add(box,label("Refresh to find Steam lobbies",12))
@@ -174,7 +174,7 @@ end
 function UI.Update()
     local text = read("ui-state.tsv")
     local time=tonumber(text:match("time\t(%d+)")) or 0
-    if previewUntil and os.time()<previewUntil then updateNotice("0.1.3",true)
+    if previewUntil and os.time()<previewUntil then updateNotice("0.1.4",true)
     else updateNotice(os.time()-time<=4 and text:match("update%-ready\t([^\r\n]*)") or nil) end
     if not UI.open or not valid(root) then return end
     local heartbeat = 0

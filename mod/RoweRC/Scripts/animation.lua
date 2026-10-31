@@ -12,8 +12,9 @@ function M.key(o)
     if corner then return corners[corner]+4 end
 end
 function M.discover(pawn,each)
-    local adapter={pawn=pawn,wheels={},audio={}}
+    local adapter={pawn=pawn,wheels={},audio={},visualSources={}}
     each(pawn,"StaticMeshComponent",function(o)
+        adapter.visualSources[#adapter.visualSources+1]=o
         local key=M.key(o)
         if key and (not adapter.wheels[key] or name(o):match("^TireDisplay")) then adapter.wheels[key]=o end
     end)

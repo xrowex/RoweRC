@@ -16,6 +16,8 @@ local bootstrapAttempted = false
 local driveAfterLoad = nil
 local adapter, lastExport, lastTick = nil, -1, nil
 local appearanceIdentity, lastAppearance = nil, -1
+local cachedPawn, lastUiPoll, lastRemotePoll, lastCommandPoll = nil,-1,-1,-1
+local perf={started=-1,ticks=0,exports=0,applies=0}
 
 local function log(s) print("[RoweRC] " .. s .. "\n") end
 local function valid(o) return o ~= nil and o:IsValid() end
@@ -57,6 +59,7 @@ local function clear()
         for _, group in pairs(ghosts) do
             Animation.destroyAudio(group)
             for _, part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
+            if valid(group.root) then group.root:K2_DestroyActor() end
         end
     end
     ghosts = {}; lastRemoteText = ""; lastRemoteAt = -1; adapter = nil
@@ -65,16 +68,17 @@ end
 RegisterLoadMapPreHook(function()
     if UI.open then UI.Close() else UI.Invalidate() end
     for _,group in pairs(ghosts) do Animation.destroyAudio(group) end
-    appearanceIdentity = nil; lastAppearance = -1; adapter = nil; lastExport = -1; lastTick = nil; transitioning = true; ghosts = {}; levelName = ""; lastRemoteText = ""
+    cachedPawn=nil; perf={started=-1,ticks=0,exports=0,applies=0}; lastUiPoll=-1; lastRemotePoll=-1; lastCommandPoll=-1; appearanceIdentity = nil; lastAppearance = -1; adapter = nil; lastExport = -1; lastTick = nil; transitioning = true; ghosts = {}; levelName = ""; lastRemoteText = ""
 end)
 RegisterLoadMapPostHook(function() transitioning = false end)
 
 local function player()
+    if valid(cachedPawn) then return cachedPawn end
     local controller = UE.GetPlayerController()
     if not valid(controller) then return nil end
     local pawn = controller.Pawn
-    if valid(pawn) and pawn:IsA("/Script/RCDriftSim.RCDriftPawn") then return pawn end
-    return nil
+    if valid(pawn) and pawn:IsA("/Script/RCDriftSim.RCDriftPawn") then cachedPawn=pawn; return pawn end
+    cachedPawn=nil; return nil
 end
 local function level(pawn)
     local world = pawn:GetWorld()
@@ -105,6 +109,10 @@ local function createGhost(pawn)
     local mathLib = StaticFindObject("/Script/Engine.Default__KismetMathLibrary")
     if not valid(meshClass) or not valid(actorClass) or not valid(mathLib) then return {} end
     local world, group = pawn:GetWorld(), {}
+    group.root=world:SpawnActor(actorClass,pawn:K2_GetActorLocation(),pawn:K2_GetActorRotation())
+    assert(valid(group.root),"Could not create remote visual root")
+    group.root.StaticMeshComponent:SetMobility(2); group.root.StaticMeshComponent:SetCollisionEnabled(0)
+    group.root:SetActorEnableCollision(false)
     local parent = pawn:GetTransform()
     eachComponent(pawn, "StaticMeshComponent", function(source)
         if #group >= 160 then return end
@@ -134,6 +142,8 @@ local function createGhost(pawn)
         target:SetSimulatePhysics(false)
         actor:SetActorEnableCollision(false)
         target:SetStaticMesh(source.StaticMesh)
+        assert(actor:K2_AttachToActor(group.root,FName("None"),1,1,1,false),"Could not attach remote part")
+        actor:K2_SetActorRelativeTransform(part.relative,false,{},true)
         for i = 0, math.min(source:GetNumMaterials(), 32) - 1 do target:SetMaterial(i, source:GetMaterial(i)) end
     end)
     group.audio = Animation.spawnAudio(adapter, world, pawn:K2_GetActorLocation())
@@ -170,7 +180,7 @@ local function render(pawn, text, now, dt)
                 if p[11] and p[11]:match("^%x+$") and #p[11]==64 and group.revision~=p[11] and now>=(group.appearanceRetry or 0) then
                     local definitions=Appearance.parse(read("appearance."..id..".tsv",131072),p[8])
                     if definitions then
-                        local replacement={}
+                        local replacement={root=group.root}
                         local ok,failure=pcall(function()
                             local resolved,reason=Appearance.resolve(definitions)
                             if not resolved then error(reason) end
@@ -181,7 +191,7 @@ local function render(pawn, text, now, dt)
                             for _,part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
                             for i=#group,1,-1 do group[i]=nil end
                             for i,part in ipairs(replacement) do group[i]=part end
-                            group.revision=p[11]; group.appearanceError=nil
+                            group.revision=p[11]; group.appearanceError=nil; perf.applies=perf.applies+1
                             write("remote-appearance-error.txt","")
                             log("Applied complete peer appearance "..id..": "..#group.."/"..#definitions.." parts")
                         else
@@ -201,16 +211,21 @@ local function render(pawn, text, now, dt)
                         local v=sample.pose
                         local location={X=v[1],Y=v[2],Z=v[3]}
                         local transform=mathLib:MakeTransform(location,{Pitch=v[4],Yaw=v[5],Roll=v[6]},pawn:GetActorScale3D())
+                        group.root:K2_SetActorTransform(transform,false,{},true)
+                        group.profileFrames=(group.profileFrames or 0)+1
+                        if sample.predicting then group.profilePredicted=(group.profilePredicted or 0)+1 end
+                        group.profileDelay=sample.delay
+                        local wheelTransforms={}
                         for _,part in ipairs(group) do
-                            if valid(part.actor) then
-                                local relative=part.relative
-                                if sample.motion and part.bind and part.key then
+                            if sample.motion and part.bind and part.key and part.key>0 and valid(part.actor) then
+                                local wheel=wheelTransforms[part.key]
+                                if not wheel then
                                     local offset=2+(part.key-1)*6; local m=sample.motion
-                                    local wheel=mathLib:MakeTransform({X=m[offset],Y=m[offset+1],Z=m[offset+2]},
+                                    wheel=mathLib:MakeTransform({X=m[offset],Y=m[offset+1],Z=m[offset+2]},
                                         {Pitch=m[offset+3],Yaw=m[offset+4],Roll=m[offset+5]},part.wheelScale or {X=1,Y=1,Z=1})
-                                    relative=mathLib:ComposeTransforms(part.bind,wheel)
+                                    wheelTransforms[part.key]=wheel
                                 end
-                                part.actor:K2_SetActorTransform(mathLib:ComposeTransforms(relative,transform),false,{},true)
+                                part.actor:K2_SetActorRelativeTransform(mathLib:ComposeTransforms(part.bind,wheel),false,{},true)
                             end
                         end
                         Animation.updateAudio(group,sample.motion,location,listener,dt,sample.age)
@@ -223,6 +238,7 @@ local function render(pawn, text, now, dt)
         if not present[id] then
             Animation.destroyAudio(group)
             for _,part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
+            if valid(group.root) then group.root:K2_DestroyActor() end
             ghosts[id]=nil
         end
     end
@@ -244,13 +260,19 @@ local function update()
             end
         end
     end
-    UI.Update()
     local pawn = player()
     if not pawn then clear(); return end
     local currentLevel = level(pawn)
     if not validLevel(currentLevel) then return end
     if currentLevel ~= levelName then clear(); levelName = currentLevel end
-    local command = read("command.tsv")
+    local gameplay = StaticFindObject("/Script/Engine.Default__GameplayStatics")
+    local now = gameplay:GetRealTimeSeconds(pawn)
+    local dt = lastTick and math.max(.0001,math.min(.25,now-lastTick)) or .016; lastTick=now
+    perf.ticks=perf.ticks+1
+    if perf.started<0 then perf.started=now end
+    if now-lastUiPoll>=.2 then lastUiPoll=now; UI.Update() end
+    local command
+    if now-lastCommandPoll>=.05 then lastCommandPoll=now; command=read("command.tsv") end
     if command then
         local p = split(command:gsub("[\r\n]+$", ""))
         if p[1] ~= commandSeen then
@@ -300,12 +322,9 @@ local function update()
         end
     end
     if driveAfterLoad == currentLevel then driveAfterLoad = nil; pawn:ResumeDrive() end
-    local gameplay = StaticFindObject("/Script/Engine.Default__GameplayStatics")
-    local now = gameplay:GetRealTimeSeconds(pawn)
-    local dt = lastTick and math.max(.001,math.min(.1,now-lastTick)) or .016; lastTick=now
     if not adapter then adapter=Animation.discover(pawn,eachComponent) end
     if now-lastExport >= .03 then
-    lastExport=now; sequence = sequence + 1
+    lastExport=now; sequence = sequence + 1; perf.exports=perf.exports+1
     local motion=Animation.capture(adapter,StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),now)
     local values={}; for _,v in ipairs(motion) do values[#values+1]=string.format("%.7g",v) end
     local position, rotation = pawn:K2_GetActorLocation(), pawn:K2_GetActorRotation()
@@ -317,30 +336,45 @@ local function update()
     if now-lastAppearance>1 then
         lastAppearance=now
         local ok,snapshot,identity=pcall(Appearance.capture,pawn,eachComponent,Animation,adapter,
-            StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),run,sequence,appearanceIdentity)
+            StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),run,sequence,appearanceIdentity,now)
         if ok then
             if snapshot then write("appearance.tsv",snapshot) end
             appearanceIdentity=identity; write("appearance-error.txt","")
         else write("appearance-error.txt",tostring(snapshot)) end
     end
-    local remote = read("remote.tsv")
+    local remote
+    if now-lastRemotePoll>=1/60 then lastRemotePoll=now; remote=read("remote.tsv") end
     if remote and remote:sub(1,5)=="RRC1\n" and remote~=lastRemoteText then
         lastRemoteText=remote; lastRemoteAt=now
     end
     -- A short Windows sharing/rename collision must not destroy and respawn the car.
     if lastRemoteText~="" and now-lastRemoteAt<2 then render(pawn,lastRemoteText,now,dt)
     elseif next(ghosts) then clear() end
+    if now-perf.started>=2 then
+        local seconds=now-perf.started
+        local lines={string.format("loop_hz\t%.1f\nexport_hz\t%.1f\nappearance_applies\t%d",perf.ticks/seconds,perf.exports/seconds,perf.applies)}
+        for id,group in pairs(ghosts) do
+            lines[#lines+1]=string.format("peer\t%s\trender_hz=%.1f\tdelay_ms=%.0f\tpredicted_frames=%d",id,
+                (group.profileFrames or 0)/seconds,(group.profileDelay or .12)*1000,group.profilePredicted or 0)
+            group.profileFrames=0; group.profilePredicted=0
+        end
+        write("performance.tsv",table.concat(lines,"\n")); perf={started=now,ticks=0,exports=0,applies=0}
+    end
 end
 
--- Avoid queuing unbounded work while the game is loading or paused.
-LoopAsync(16, function()
-    if pending then return end
-    pending = true
-    ExecuteInGameThread(function()
-        local ok, err = pcall(update)
-        if not ok and tostring(err) ~= lastError then lastError = tostring(err); log(lastError); write("error.txt", lastError) end
-        pending = false
+-- Render on every engine frame; file/network cadence is independently throttled above.
+local function tick()
+    local ok,err=pcall(update)
+    if not ok and tostring(err)~=lastError then lastError=tostring(err); log(lastError); write("error.txt",lastError) end
+end
+if type(LoopInGameThreadAfterFrames)=="function" and EngineTickAvailable then
+    LoopInGameThreadAfterFrames(1,tick)
+    log("Frame-synchronized remote rendering enabled")
+else
+    LoopAsync(1,function()
+        if pending then return end; pending=true
+        ExecuteInGameThread(function() tick(); pending=false end)
     end)
-end)
+end
 write("error.txt", "")
 log("loaded; F8 opens friends and maps")

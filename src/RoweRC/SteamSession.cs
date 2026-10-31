@@ -26,6 +26,8 @@ public sealed class SteamSession : IDisposable
     private string localAppearanceRevision = "";
     private AppearanceChunk[] localAppearanceChunks = [];
     private long lastAppearanceRead;
+    private long metricStart = Environment.TickCount64;
+    private int ticksMeasured, posesSent;
     public LobbyBrowser? Browser { get; private set; }
     public event Action? Changed;
     public string Status { get; private set; } = "Steam disconnected";
@@ -86,7 +88,7 @@ public sealed class SteamSession : IDisposable
         callbacks.Add(Callback<LobbyDataUpdate_t>.Create(r => {
             if (InLobby && r.m_ulSteamIDLobby == lobby.m_SteamID && !Hosting) FollowHostState();
         }));
-        SetStatus($"Steam connected as {Persona} — mod 0.1.3, App ID {appId}");
+        SetStatus($"Steam connected as {Persona} — mod 0.1.4, App ID {appId}");
     }
     public void Host(MapEntry selected, bool isPublic = false)
     {
@@ -128,7 +130,7 @@ public sealed class SteamSession : IDisposable
         // a new level path with an old hash/epoch from separate metadata callbacks.
         var metadata = new Dictionary<string, string> {
             ["rrc_mod"] = "rowerc", ["rrc_protocol"] = Protocol.Version.ToString(),
-            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.3",
+            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.4",
             ["rrc_access"] = publicHost ? "public" : "friends",
             ["name"] = Persona + "'s RC Tandems" };
         foreach (var (key, value) in metadata) if (!SteamMatchmaking.SetLobbyData(lobby, key, value)) return false;
@@ -146,7 +148,7 @@ public sealed class SteamSession : IDisposable
         if (next == null)
         {
             SteamMatchmaking.LeaveLobby(joined);
-            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.3 or later."); return;
+            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.4 or later."); return;
         }
         var selected = findMap(next.Content);
         if (selected == null || !next.SameMap(selected))
@@ -197,6 +199,7 @@ public sealed class SteamSession : IDisposable
     }
     public void Tick()
     {
+        ticksMeasured++;
         if (!initialized) return;
         SteamAPI.RunCallbacks();
         var now = Environment.TickCount64;
@@ -260,10 +263,11 @@ public sealed class SteamSession : IDisposable
             peer.LastAppearanceChunk = now;
             if (error.Length == 0) { peer.NextAppearanceChunk++; peer.AppearanceSentAt = now; }
         }
-        if (now - lastSend >= 50 && local != null && lastFrame != (local.Run, local.Sequence))
+        if (local != null && lastFrame != (local.Run, local.Sequence))
         {
             var bytes = PeerEnvelope.Pose(state, local).Encode();
             foreach (var peer in peers.Values) Send(peer, bytes, peer.Route(now), false);
+            if (peers.Count > 0) posesSent++;
             lastSend = now; lastFrame = (local.Run, local.Sequence);
         }
         bridge.WriteRemotes(peers.Values.Where(p => p.HasCar(now)).Select(p => new RemoteCar(p.Id,
@@ -312,6 +316,9 @@ public sealed class SteamSession : IDisposable
     {
         if (now - lastLog < 5000) return;
         lastLog = now;
+        var measuredSeconds = Math.Max(.001, (now - metricStart) / 1000.0);
+        log.Write($"cadence tickHz={ticksMeasured / measuredSeconds:F1} txPoseHz={posesSent / measuredSeconds:F1}");
+        metricStart = now; ticksMeasured = posesSent = 0;
         var relay = SteamNetworkingUtils.GetRelayNetworkStatus(out var relayInfo);
         log.Write($"lobby={Code} role={Role} wanted={state?.Level} local={local?.Level ?? "none"} bridgeError={bridge.Error} relay={relay} networkError={networkFailure}");
         foreach (var peer in peers.Values)
