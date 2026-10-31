@@ -11,6 +11,8 @@ local hostControls = {}
 local mapButton, hostButton, publicButton, joinButton, updateLabel, browserLabel
 local browserRows, lobbies, browserPage = {}, {}, 1
 local noticeRoot, noticeVersion, previewUntil
+local peerLabel,contactLabel,contactButton
+local contactEnabled=false
 local function valid(o) return o and o:IsValid() end
 local function read(name)
     local f = io.open(base .. name, "rb"); if not f then return "" end
@@ -119,8 +121,11 @@ function UI.Open()
     local scroll = make("ScrollBox"); border:SetContent(scroll)
     local box = make("VerticalBox"); scroll:AddChild(box)
     add(box, label("ROWE RC  /  FRIENDS + MAPS", 24))
-    add(box, label("RoweRC 0.1.4  /  F8 closes  /  Steam development App ID 480", 12))
+    add(box, label("RoweRC 0.1.5  /  F8 closes  /  Steam development App ID 480", 12))
     statusLabel = add(box, label("Waiting for Steam helper...", 13))
+    peerLabel=add(box,label("",12))
+    contactLabel=add(box,label("Car contact: off",12))
+    contactButton=button(box,"Toggle experimental car contact (host)",function() request("contact") end)
     add(box, label("STEAM LOBBY BROWSER",18))
     browserLabel=add(box,label("Refresh to find Steam lobbies",12))
     button(box,"Refresh Steam lobbies",function() request("browse") end)
@@ -174,12 +179,13 @@ end
 function UI.Update()
     local text = read("ui-state.tsv")
     local time=tonumber(text:match("time\t(%d+)")) or 0
-    if previewUntil and os.time()<previewUntil then updateNotice("0.1.4",true)
+    if previewUntil and os.time()<previewUntil then updateNotice("0.1.5",true)
     else updateNotice(os.time()-time<=4 and text:match("update%-ready\t([^\r\n]*)") or nil) end
     if not UI.open or not valid(root) then return end
     local heartbeat = 0
     local activeMap = ""
     local newMaps, newLobbies = {}, {}
+    local peerLines={}
     for line in text:gmatch("[^\r\n]+") do
         local k, value, extra = line:match("^([^\t]+)\t([^\t]*)\t?(.*)$")
         if k == "browser" then browserLabel:SetText(FText(value))
@@ -187,6 +193,8 @@ function UI.Update()
             local caption,problem=extra:match("^([^\t]*)\t(.*)$")
             newLobbies[#newLobbies+1]={id=value,caption=caption or extra,problem=problem or ""}
         elseif k == "role" then role = value
+        elseif k == "peer" then peerLines[#peerLines+1]=value
+        elseif k == "contact" then contactEnabled=value=="1"
         elseif k == "update" then updateLabel:SetText(FText(value))
         elseif k == "active" then activeMap = value
         elseif k == "time" then heartbeat = tonumber(value) or 0
@@ -195,6 +203,10 @@ function UI.Update()
         elseif k == "map" then newMaps[#newMaps+1] = {id=value,name=extra} end
     end
     if os.time() - heartbeat > 4 then statusLabel:SetText(FText("Steam helper offline. Start RoweRC.exe to enable hosting and maps.")) end
+    peerLabel:SetText(FText(table.concat(peerLines,"\n")))
+    contactButton:SetVisibility(role=="host" and 0 or 1)
+    local contactError=read("contact-error.txt")
+    contactLabel:SetText(FText(contactEnabled and ("Car contact: experimental ON - body hull + tires"..(contactError~="" and "\nCollider: "..contactError:sub(1,180) or "")) or "Car contact: OFF - host can enable it for this lobby"))
     lobbies=newLobbies
     browserPage=math.max(1,math.min(browserPage,math.max(1,math.ceil(#lobbies/6))))
     for i,w in ipairs(browserRows) do

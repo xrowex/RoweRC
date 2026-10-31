@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([string]$Version = '0.1.4', [string]$Repository = 'xrowex/RoweRC')
+param([string]$Version = '0.1.5', [string]$Repository = 'xrowex/RoweRC')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid version or repository.' }
 $stage = Join-Path $PSScriptRoot 'dist\RoweRC\InstallFiles'
@@ -12,6 +12,7 @@ $paths = @(
     'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/animation.lua',
     'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/smoothing.lua',
     'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/appearance.lua'
+    'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/physics.lua'
 )
 $output = Join-Path $PSScriptRoot "dist\update-$Version.zip"
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output }
@@ -32,7 +33,7 @@ try {
         Version=$Version; GameBuild='3c46a39f90'; Size=(Get-Item -LiteralPath $output).Length
         Url="https://github.com/$Repository/releases/download/v$Version/update-$Version.zip"
         Sha256=(Get-FileHash -LiteralPath $output).Hash.ToLowerInvariant()
-        Notes='Frame-synchronized remote rendering, faster pose delivery and smoother interpolation.'
+        Notes='Experimental host-controlled body and tire contact, cubic heading smoothing, smaller packets and visible Steam ping/jitter.'
     } | ConvertTo-Json -Compress
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $signature = $rsa.SignData($bytes, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pss)

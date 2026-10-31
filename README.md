@@ -12,10 +12,11 @@ Steam friends lobbies and custom-map loading for the **Epic Windows build `3c46a
 - The Steam browser discovers a real public RoweRC lobby. Friends-only rooms use a separate Steam friends lookup.
 - A local native peer fixture swaps to a Toyota Supra body, applies independent red paint and different rims across 80 components while the local car retains its purple paint. Moving wheel transforms, nonzero remote motor volume/pitch and peer cleanup were also checked. The complete 29,880-byte snapshot validates and reassembles from 17 reliable chunks.
 - The 0.1.3 cold-asset loading fix resolved the real two-PC missing 180SX body/chassis report: all 80/80 parts loaded, and the guest confirmed the body visible. Complete visual replacement now waits for all assets.
-- A 0.1.4 native local fixture measured 202.9 remote-render updates/s from a 20 Hz input, with a 146 ms buffer and no prediction in that sample. Local export measured 30.5 Hz. Higher Steam send cadence and subjective smoothness still need a new two-PC driving check.
-- 70 standalone checks cover packets, bridge freshness, maps, signed updates and appearance assembly; 17 Lua checks exercise snapshot smoothing and six cover appearance regressions. All five Lua modules parse under Lua 5.4.
+- In the real 0.1.4 session, the local log measured about 29–31 received poses/s and 119 render updates/s with no prediction in the sampled window. The user still reported remote-car jitter. Version 0.1.5 adds cubic heading interpolation, smaller packets, visible Steam ping and arrival-jitter measurements; subjective smoothness is still awaiting another two-PC check.
+- The 0.1.5 local native contact fixture extracted a 350Z body outline and four tire outlines (88 points). Its 2,346-byte network packet fit the transport limit, and a computed contact changed the real car's motion and was acknowledged once. This fixture uses a simulated other car; it does not verify two-PC impacts.
+- 85 standalone checks cover packets, maps, updates, appearance, contact geometry and impulse handling. Lua checks cover smoothing (19), appearance (6) and the native contact adapter (8). All six runtime Lua modules parse under Lua 5.4.
 
-**Not yet verified:** the new appearance/wheel/audio features across two PCs, both players seeing each other, host map changes with a connected guest, sustained tandem driving under varied latency, and a newly cooked custom map. Multiplayer remains experimental.
+**Not yet verified:** two-PC physical contacts, high-latency contact feel, wheel/audio details across two PCs, host map changes with a connected guest, sustained smooth tandem driving, and a newly cooked custom map. Multiplayer remains experimental.
 
 ## Play with a friend
 
@@ -33,9 +34,19 @@ Close the game. In the extracted distribution, run `./Install.ps1` with PowerShe
 
 No Steam friend invitations are sent automatically. Share the lobby code yourself.
 
-Each player drives with the game's local physics. Remote cars are collision-free visual ghosts. Version 0.1.2 adds stock body/chassis meshes, body and rim colors, rim/tire selections, wheel steering/rotation and the six native motor-audio layers. Appearance snapshots refresh when visible choices change, use independent materials per peer and are acknowledged over reliable Steam transport. From 0.1.4, remote visuals update on engine frames, with cubic body interpolation, quaternion rotation blending, a monotonic playout clock, an adaptive 120–240 ms buffer and at most 100 ms of positional prediction; car resets clear the buffer. Both players need 0.1.2 or later for the visual/audio additions, and 0.1.4 for the improved send cadence. A 0.1.1 peer can still exchange body poses and uses the old appearance fallback.
+Each player drives with the game's local physics. Car contact is off by default; the host can enable experimental contact in F8 when both players have **0.1.5**. Version 0.1.2 adds stock body/chassis meshes, body and rim colors, rim/tire selections, wheel steering/rotation and the six native motor-audio layers. Appearance snapshots refresh when visible choices change, use independent materials per peer and are acknowledged over reliable Steam transport. From 0.1.4, remote visuals update on engine frames, with cubic body interpolation, quaternion rotation blending, a monotonic playout clock, an adaptive 120–240 ms buffer and at most 100 ms of positional prediction; car resets clear the buffer. Version 0.1.5 also smooths upright heading velocity and removes duplicated bridge/debug properties from network JSON. Older peers can exchange visual poses but cannot participate in physical contact.
 
-Only stock `/Game/Vehicle` assets and scalar/vector material overrides are replicated; there are no downloaded models, textures or sounds. Chat, voice, synchronized AI, physical contact, host migration, and automatic map downloads are not implemented. Native map travel can initialize the game's default car; cosmetic/tune persistence across raw level travel still needs validation.
+## Experimental car contact (0.1.5)
+
+After both players update, the host opens F8 and selects **Toggle experimental car contact (host)**. Both players close F8 and enter Drive. The peer line shows whether its collider is ready or its car is paused. Enabling contact can briefly pause the game while it extracts and caches the selected body's mesh outline; an unsupported mesh is reported in F8.
+
+The collider follows a convex outline derived from the actual body vertices plus four independently transformed tire cylinders. Contact follows the native game's upright XY-plane simulation: this is a projected body/wheel footprint, not a full 3D triangle-mesh solver, deformation, climbing or tumbling. The current contact model uses equal nominal 1.5 kg cars and geometry-derived yaw inertia. Body concavities are filled by the convex hull.
+
+The host uses fresh physical snapshots, short bounded prediction and swept contact samples rather than the delayed visual interpolation poses. Relative velocity at the impact point determines equal/opposite impulses, yaw torque and limited sliding friction. Each owner applies its delta to the verified native simulation, with acknowledgements and run/reset/epoch/freshness guards. High latency still delays delivery and can separate the apparent impact from its response; transatlantic bumping needs real playtesting. This is not a replacement for a server-authoritative native driving simulation with rollback.
+
+F8 displays Steam round-trip ping, received source cadence and arrival jitter. Ping is measured delay; arrival jitter also includes scheduling and packet delivery variation. A UK peer alone does not establish the cause of visible jitter. Logs add connection quality, sequence gaps and interpolation headroom under `%LOCALAPPDATA%/RoweRC/bridge`.
+
+Only stock `/Game/Vehicle` assets, declarative collider outlines and material overrides are replicated; there are no downloaded models, textures or sounds. Chat, voice, synchronized AI, host migration, and automatic map downloads are not implemented. Native map travel can initialize the game's default car; cosmetic/tune persistence across raw level travel still needs validation.
 
 ## Automatic updates (0.1.1 onward)
 

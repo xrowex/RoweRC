@@ -4,7 +4,7 @@ namespace RoweRC;
 
 // One Steam metadata value is the commit point for a host's map change.
 public sealed record LobbyState(int Protocol, string Build, string Room, long Epoch,
-    string MapId, string Content, string Level)
+    string MapId, string Content, string Level, bool Collisions = false)
 {
     public static LobbyState Create(MapEntry map, string room, long epoch) =>
         new(RoweRC.Protocol.Version, MapCatalog.SupportedBuild, room, epoch, map.Manifest.Id, map.Fingerprint, map.Manifest.Level);
@@ -24,7 +24,7 @@ public sealed record LobbyState(int Protocol, string Build, string Room, long Ep
 }
 
 public sealed record PeerEnvelope(int Protocol, string Room, long Epoch, string Content, string Kind,
-    string Level, bool Ready, CarFrame? Car, AppearanceChunk? Appearance = null, string Ack = "")
+    string Level, bool Ready, CarFrame? Car, AppearanceChunk? Appearance = null, string Ack = "", ContactImpulse? Contact = null)
 {
     public static PeerEnvelope Hello(LobbyState state, CarFrame? local) =>
         new(RoweRC.Protocol.Version, state.Room, state.Epoch, state.Content, "hello", local?.Level ?? "", local?.Level == state.Level, null);
@@ -40,6 +40,9 @@ public sealed record PeerEnvelope(int Protocol, string Room, long Epoch, string 
             if (packet == null || packet.Protocol != RoweRC.Protocol.Version || packet.Room != state.Room || packet.Epoch != state.Epoch
                 || packet.Content != state.Content || packet.Level is null || packet.Level.Length > 240) return null;
             if (packet.Ack is null || packet.Ack.Length != 0 && (packet.Ack.Length != 64 || !packet.Ack.All(char.IsAsciiHexDigit))) return null;
+            if (packet.Kind == "contact") return state.Collisions && packet.Level == state.Level && packet.Ready && packet.Car == null
+                && packet.Appearance == null && packet.Contact is { Valid: true } ? packet : null;
+            if (packet.Contact != null) return null;
             if (packet.Kind == "appearance") return packet.Car == null && packet.Appearance is { Valid: true } ? packet : null;
             if (packet.Appearance != null) return null;
             if (packet.Kind == "hello") return packet.Car == null && (packet.Level == "" || RoweRC.Protocol.ValidLevel(packet.Level))
@@ -74,6 +77,10 @@ public sealed class PeerLink(ulong id, long now)
     public long AppearanceSentAt { get; set; }
     public CarFrame? Car { get; private set; }
     public long CarReceivedAt { get; private set; }
+    public int PingMs { get; set; } = -1;
+    public double ArrivalJitterMs { get; private set; }
+    public double SourceHz { get; private set; }
+    public int PoseGaps { get; private set; }
     public PeerRoute Route(long clock) => clock - ModernReceived < 4000 || clock - LegacyReceived >= 4000 ? PeerRoute.Messages : PeerRoute.Legacy;
     public bool TryLegacy(long clock) => clock - JoinedAt > 2000 && clock - ModernReceived > 4000;
     public void Accept(PeerEnvelope packet, PeerRoute route, long clock)
@@ -84,6 +91,17 @@ public sealed class PeerLink(ulong id, long now)
         if (packet.Appearance != null) Appearance.Accept(packet.Appearance, clock);
         if (packet.Car is not { } car) return;
         if (Car != null && Car.Run == car.Run && Car.Sequence >= car.Sequence) return;
+        if (Car is { Motion: { } previous } && car.Motion is { } motion && Car.Run == car.Run)
+        {
+            var sourceMs = (motion.Time - previous.Time) * 1000;
+            if (sourceMs is > 0 and < 2000)
+            {
+                ArrivalJitterMs += (Math.Abs(clock - CarReceivedAt - sourceMs) - ArrivalJitterMs) * .1;
+                SourceHz = SourceHz == 0 ? 1000 / sourceMs : SourceHz * .9 + 100 / sourceMs;
+                if (car.Sequence > Car.Sequence + 1) PoseGaps++;
+            }
+        }
+        else { ArrivalJitterMs = SourceHz = 0; PoseGaps = 0; }
         Car = car; CarReceivedAt = clock; PosesReceived++;
     }
     public bool HasCar(long clock) => Car != null && clock - CarReceivedAt < 3000;

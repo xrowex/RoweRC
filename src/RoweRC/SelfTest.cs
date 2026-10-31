@@ -160,6 +160,56 @@ internal static class SelfTest
             Check(!link.HasCar(7000), "silent peers lose their stale visual car");
             link.Accept(PeerEnvelope.Hello(advertised, hostCar), PeerRoute.Messages, 7100);
             Check(link.Route(7200) == PeerRoute.Messages, "working primary connection replaces fallback");
+            var timing = new PeerLink(43, 0);
+            timing.Accept(PeerEnvelope.Pose(advertised, animatedCar), PeerRoute.Messages, 1000);
+            timing.Accept(PeerEnvelope.Pose(advertised, animatedCar with { Sequence = animatedCar.Sequence + 1, Motion = motion with { Time = motion.Time + .05 } }), PeerRoute.Messages, 1050);
+            Check(timing.ArrivalJitterMs < .001 && Math.Abs(timing.SourceHz - 20) < .001, "constant transit delay does not create arrival jitter");
+            timing.Accept(PeerEnvelope.Pose(advertised, animatedCar with { Sequence = animatedCar.Sequence + 3, Motion = motion with { Time = motion.Time + .15 } }), PeerRoute.Messages, 1180);
+            Check(Math.Abs(timing.ArrivalJitterMs - 3) < .001 && timing.PoseGaps == 1, "delivery variation and skipped pose sequences are measured independently");
+            const string shell = "-.22:-.10|.22:-.10|.22:.10|-.22:.10";
+            var geometry=ContactGeometry.Parse(shell)!;
+            Check(ContactGeometry.Parse("0:0|1:1|2:2") == null && ContactGeometry.Parse("0:0|.2:0|.1:.05|.2:.2|0:.2") == null,
+                "colliders reject degenerate and concave network polygons");
+            var contact=ContactGeometry.Solve(new(0,0),0,new(1,0),0,1.5,.03,geometry,new(.43,0),0,new(0,0),0,1.5,.03,geometry);
+            Check(contact is { } centered && Math.Abs(centered.A.X+centered.B.X)<1e-8 && Math.Abs(centered.Wa)+Math.Abs(centered.Wb)<1e-8
+                && centered.A.X<0 && centered.B.X>0, "centered bumper contact conserves momentum without inventing spin");
+            Check(ContactGeometry.Solve(new(0,0),0,new(-1,0),0,1.5,.03,geometry,new(.43,0),0,new(1,0),0,1.5,.03,geometry)==null,
+                "separating cars receive no second collision impulse");
+            var glancing=ContactGeometry.Solve(new(0,0),0,new(1,.3),0,1.5,.03,geometry,new(.43,.12),0,new(0,0),0,1.5,.03,geometry);
+            Check(glancing is { } offsetHit && Math.Abs(offsetHit.Wa)>.01 && Math.Abs(offsetHit.Wb)>.01
+                && (new ContactVector(1,.3)+offsetHit.A).Length<Math.Sqrt(1.09), "off-center contact produces yaw and friction reduces sliding speed");
+            Check(ContactGeometry.Solve(new(0,0),0,new(1,0),0,1.5,.03,geometry,new(2,0),0,new(0,0),0,1.5,.03,geometry)==null,
+                "separated silhouettes do not collide");
+            var physics=new CarPhysics(100.25,1,1,0,0,1.5,.03,0,true,shell);
+            Check(CarPhysics.Read(physics.Tsv)==physics && CarPhysics.Read(physics.Tsv.Replace(",1.5,",",NaN,"))==null,
+                "native dynamics frames round-trip and reject non-finite mass");
+            var contactCar=animatedCar with { Physics=physics };
+            var compactPacket=PeerEnvelope.Pose(advertised,contactCar).Encode();
+            Check(!System.Text.Encoding.UTF8.GetString(compactPacket).Contains("\"Tsv\"")
+                && PeerEnvelope.Read(compactPacket,advertised)?.Car?.Physics==physics,
+                "wire packets contain dynamics once without duplicated bridge/debug properties");
+            Check(Protocol.ReadLocal(line.Replace("\t0\t123\n","\t"+motion.Tsv+"\t"+physics.Tsv+"\t123\n"))?.Physics==physics,
+                "bridge accepts optional dynamics while preserving old frames");
+            var contactState=advertised with { Collisions=true };
+            var hitPacket=new PeerEnvelope(Protocol.Version,advertised.Room,advertised.Epoch,advertised.Content,"contact",advertised.Level,true,null,
+                Contact:new(1,contactCar.Run,1,100.25,0,0,-.5,0,0));
+            Check(PeerEnvelope.Read(hitPacket.Encode(),contactState)?.Contact != null && PeerEnvelope.Read(hitPacket.Encode(),advertised)==null,
+                "contact packets require the host's active contact epoch");
+            Check(PeerEnvelope.Read((hitPacket with { Contact=hitPacket.Contact! with { Dvx=100 } }).Encode(),contactState)==null,
+                "network contact impulses are bounded before reaching the game");
+            var world=new ContactWorld();
+            var bodyA=contactCar with { Pose=new(0,0,0,0,0,0) };
+            var bodyB=contactCar with { Run="peer-run",Pose=new(43,0,0,0,0,0),Physics=physics with { Vx=0 } };
+            var firstHits=world.Step([new(1,bodyA,0),new(2,bodyB,0)],1000).ToArray();
+            Check(firstHits.Length==2 && firstHits[0].Hit.Sequence==firstHits[1].Hit.Sequence
+                && !world.Step([new(1,bodyA,0),new(2,bodyB,0)],1008).Any(), "one host event updates both owners and suppresses repeat impulses before acknowledgement");
+            Check(!world.Step([new(1,bodyA,.3),new(2,bodyB,.3)],1200).Any(), "stale physical states cannot create contacts");
+            var sweptWorld=new ContactWorld();
+            var fastCar=bodyA with { Pose=bodyA.Pose with { X=-49 },Physics=physics with { Vx=24.5 } };
+            var stationary=bodyB with { Pose=bodyB.Pose with { X=0 } };
+            sweptWorld.Step([new(1,fastCar,0),new(2,stationary,0)],1000).ToArray();
+            Check(sweptWorld.Step([new(1,fastCar with { Sequence=fastCar.Sequence+1,Pose=fastCar.Pose with { X=49 } },0),new(2,stationary,0)],1040).Count()==2,
+                "swept samples catch a car crossing another between host ticks");
             var signedFeed = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "signed-update-fixture.json"));
             Check(AutoUpdater.Verify(signedFeed).Version == "9.9.9", "update signature is verified with the pinned public key");
             var signed = JsonSerializer.Deserialize<SignedUpdate>(signedFeed)!;

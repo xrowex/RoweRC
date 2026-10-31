@@ -5,6 +5,7 @@ local UI = require("menu")
 local Animation = require("animation")
 local Smooth = require("smoothing")
 local Appearance = require("appearance")
+local Physics = require("physics")
 local base = (os.getenv("LOCALAPPDATA") or ".") .. "/RoweRC/bridge/"
 local run = tostring(os.time()) .. "-" .. tostring(math.random(100000, 999999))
 local sequence, pending, commandSeen = 0, false, nil
@@ -215,6 +216,8 @@ local function render(pawn, text, now, dt)
                         group.profileFrames=(group.profileFrames or 0)+1
                         if sample.predicting then group.profilePredicted=(group.profilePredicted or 0)+1 end
                         group.profileDelay=sample.delay
+                        group.profileJitter=sample.jitter; group.profileInterval=sample.interval
+                        group.profileHeadroom=math.min(group.profileHeadroom or math.huge,sample.headroom)
                         local wheelTransforms={}
                         for _,part in ipairs(group) do
                             if sample.motion and part.bind and part.key and part.key>0 and valid(part.actor) then
@@ -328,10 +331,19 @@ local function update()
     local motion=Animation.capture(adapter,StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),now)
     local values={}; for _,v in ipairs(motion) do values[#values+1]=string.format("%.7g",v) end
     local position, rotation = pawn:K2_GetActorLocation(), pawn:K2_GetActorRotation()
+    local physics="0"
+    local state=read("ui-state.tsv") or ""
+    local heartbeat=tonumber(state:match("time\t(%d+)")) or 0
+    local contactKey=state:match("contact%-key\t([^\r\n]+)")
+    if contactKey and os.time()-heartbeat<=4 and state:find("physics-build\t3c46a39f90",1,true) and now>=(adapter.physicsRetry or 0) then
+        local ok,result=pcall(Physics.capture,pawn,adapter,StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),now,contactKey,run,read,write)
+        if ok then physics=result; write("contact-error.txt","")
+        else write("contact-error.txt",tostring(result)); adapter.physicsRetry=now+5 end
+    end
     write("local." .. tostring(sequence % 2) .. ".tsv", string.format(
-        "RRC1\t%s\t%d\t%s\t%.9g\t%.9g\t%.9g\t%.9g\t%.9g\t%.9g\t%s\t%d\n",
+        "RRC1\t%s\t%d\t%s\t%.9g\t%.9g\t%.9g\t%.9g\t%.9g\t%.9g\t%s\t%s\t%d\n",
         run, sequence, currentLevel, position.X, position.Y, position.Z,
-        rotation.Pitch, rotation.Yaw, rotation.Roll, table.concat(values,","), sequence))
+        rotation.Pitch, rotation.Yaw, rotation.Roll, table.concat(values,","), physics, sequence))
     end
     if now-lastAppearance>1 then
         lastAppearance=now
@@ -354,9 +366,10 @@ local function update()
         local seconds=now-perf.started
         local lines={string.format("loop_hz\t%.1f\nexport_hz\t%.1f\nappearance_applies\t%d",perf.ticks/seconds,perf.exports/seconds,perf.applies)}
         for id,group in pairs(ghosts) do
-            lines[#lines+1]=string.format("peer\t%s\trender_hz=%.1f\tdelay_ms=%.0f\tpredicted_frames=%d",id,
-                (group.profileFrames or 0)/seconds,(group.profileDelay or .12)*1000,group.profilePredicted or 0)
-            group.profileFrames=0; group.profilePredicted=0
+            lines[#lines+1]=string.format("peer\t%s\trender_hz=%.1f\tdelay_ms=%.0f\tpredicted_frames=%d\tarrival_jitter_ms=%.1f\tsource_interval_ms=%.1f\tmin_headroom_ms=%.1f",id,
+                (group.profileFrames or 0)/seconds,(group.profileDelay or .12)*1000,group.profilePredicted or 0,
+                (group.profileJitter or 0)*1000,(group.profileInterval or 0)*1000,(group.profileHeadroom or 0)*1000)
+            group.profileFrames=0; group.profilePredicted=0; group.profileHeadroom=nil
         end
         write("performance.tsv",table.concat(lines,"\n")); perf={started=now,ticks=0,exports=0,applies=0}
     end

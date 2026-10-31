@@ -65,6 +65,22 @@ local function position(buffer,ai,bi,t,pose)
         pose[axis]=(2*t^3-3*t^2+1)*a.pose[axis]+(t^3-2*t^2+t)*span*va
             +(-2*t^3+3*t^2)*b.pose[axis]+(t^3-t^2)*span*vb
     end
+    -- Native RC cars remain upright. Smooth their heading velocity as well as
+    -- translation; linear slerp alone changes turn rate at every 30 Hz boundary.
+    if math.abs(a.pose[4])+math.abs(a.pose[6])+math.abs(b.pose[4])+math.abs(b.pose[6])<.01 then
+        local function delta(x,y) return (y-x+180)%360-180 end
+        local ay=a.pose[5]; local by=ay+delta(ay,b.pose[5])
+        local slope=(by-ay)/span
+        local va=before and (by-(ay-delta(before.pose[5],ay)))/(b.time-before.time) or slope
+        local vb=after and ((by+delta(by,after.pose[5]))-ay)/(after.time-a.time) or slope
+        if math.abs(slope)<1e-8 then va=0; vb=0 else
+            if va*slope<=0 then va=0 end; if vb*slope<=0 then vb=0 end
+            local magnitude=(va/slope)^2+(vb/slope)^2
+            if magnitude>9 then local scale=3/math.sqrt(magnitude); va=va*scale; vb=vb*scale end
+        end
+        pose[5]=((2*t^3-3*t^2+1)*ay+(t^3-2*t^2+t)*span*va
+            +(-2*t^3+3*t^2)*by+(t^3-t^2)*span*vb+180)%360-180
+    end
 end
 function M.sample(buffer,now)
     if #buffer==0 then return nil end
@@ -72,6 +88,7 @@ function M.sample(buffer,now)
     if now-last.arrived>2 then return nil end
     local desired=now-(buffer.offset or 0)-(buffer.delay or M.delay)
     local dt=buffer.sampledAt and clamp(now-buffer.sampledAt,0,.25) or 0
+    local oldHead=buffer.playhead
     if not buffer.playhead then buffer.playhead=desired else
         local error=desired-(buffer.playhead+dt)
         -- A monotonic playout clock: earlier arrivals and buffer changes adjust speed,
@@ -117,6 +134,8 @@ function M.sample(buffer,now)
         end
         for i=50,67 do motion[i]=i%3==1 and (t<.5 and a.motion[i] or b.motion[i]) or a.motion[i]+(b.motion[i]-a.motion[i])*t end
     else motion=b.motion end
-    return {pose=pose,motion=motion,age=now-last.arrived,delay=buffer.delay or M.delay,predicting=predicting}
+    return {pose=pose,motion=motion,age=now-last.arrived,delay=buffer.delay or M.delay,predicting=predicting,
+        jitter=buffer.jitter or 0,interval=buffer.interval or 0,headroom=last.time-target,
+        speed=dt>0 and oldHead and (target-oldHead)/dt or 1}
 end
 return M

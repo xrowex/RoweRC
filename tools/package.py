@@ -7,21 +7,21 @@ docs=['README.md','CUSTOM_MAPS.md','THIRD_PARTY.md','Install.ps1']
 files=[p for sub in ['InstallFiles','licenses'] for p in (stage/sub).rglob('*') if p.is_file()]
 files += [stage/name for name in docs]
 manifest={
-    'version':'0.1.4-experimental',
+    'version':'0.1.5-experimental',
     'supportedGameBuild':'3c46a39f90',
     'engine':'5.7',
     'steamAppId':480,
     'inGameMenu':'F8',
-    'tested':['loader startup','automatic hidden helper startup','in-game menu','Steam lobby creation and leave','built-in map travel','local simulated remote-car rendering','70 protocol/map/update/appearance checks','17 smoothing checks','6 appearance checks','native frame-synchronized ghost rendering','native independent paint and rims','Steam public lobby browser'],
-    'notVerified':['new visual/audio features across two PCs','latency/tandem acceptance','newly cooked custom map','cosmetic/tune persistence across raw map travel'],
+    'tested':['loader startup','automatic hidden helper startup','in-game menu','Steam lobby creation and leave','built-in map travel','local simulated remote-car rendering','85 backend checks','19 smoothing checks','6 appearance checks','8 native adapter checks','native contact impulse and acknowledgement','native body and four tire collider extraction','native frame-synchronized ghost rendering','native independent paint and rims','Steam public lobby browser'],
+    'notVerified':['two-PC physical contacts','high-latency contact feel','two-PC subjective smoothness','wheel/audio details across two PCs','newly cooked custom map','cosmetic/tune persistence across raw map travel'],
     'sha256':{p.relative_to(stage).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}
 }
 (stage/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
 files.append(stage/'manifest.json')
-binary=dist/'RoweRC-prototype-0.1.4.zip'
+binary=dist/'RoweRC-prototype-0.1.5.zip'
 with zipfile.ZipFile(binary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
     for p in files: z.write(p,'RoweRC/'+p.relative_to(stage).as_posix())
-source=dist/'RoweRC-source-0.1.4.zip'
+source=dist/'RoweRC-source-0.1.5.zip'
 source_files=[root/p for p in docs+['Build.ps1','Prepare-Update.ps1','.gitignore']]
 source_files += [p for folder in ['src','mod','tests'] for p in (root/folder).rglob('*')
     if p.is_file() and not any(part in ['bin','obj','__pycache__'] for part in p.relative_to(root).parts)]

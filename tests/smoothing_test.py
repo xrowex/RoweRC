@@ -80,5 +80,14 @@ for i=0,40 do
     previous=monotonic.playhead
 end
 check(monotonicGood,'playback remains monotonic through jittered render frames')
+local turns={}
+for i=0,9 do local f=moving(i,10+i*.1,i); f.pose[5]=(175+100*(i*.1)^2+180)%360-180; M.push(turns,f,20+i*.1) end
+local function headingAt(target)
+    turns.playhead=target; turns.sampledAt=target+10+turns.delay; turns.output=nil; turns.correction=nil; turns.predicting=false
+    return M.sample(turns,turns.sampledAt).pose[5]
+end
+local ya,yb,yc=headingAt(10.4-h),headingAt(10.4),headingAt(10.4+h)
+check(math.abs((yc-yb)/h-(yb-ya)/h)<2,'heading acceleration stays continuous across snapshot boundaries')
+check(math.abs(headingAt(10.23)-(-179.71))<.1,'cubic heading crosses the wrapped 180 degree boundary by the short path')
 print(tostring(checks)..' smoothing checks passed')
 ''')

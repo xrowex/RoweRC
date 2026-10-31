@@ -88,6 +88,7 @@ internal sealed class BackendContext : ApplicationContext
             case "shutdown": ExitThread(); break;
             case "refresh": RefreshMaps(); break;
             case "update": _ = updater.CheckAsync(); break;
+            case "contact": VerifyGame(); steam.ToggleCollisions(); break;
             case "host": VerifyGame(); Connect(); steam.Host(Selected()); break;
             case "host-public": VerifyGame(); Connect(); steam.Host(Selected(), true); break;
             case "browse": Connect(); steam.Browser!.Refresh(settings.SteamAppId); break;
@@ -156,7 +157,10 @@ internal sealed class BackendContext : ApplicationContext
     {
         static string Clean(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var status = lastError.Length > 0 ? lastError : steam.Connected ? steam.Status : "Ready. Host or join to connect Steam.";
-        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.4\n");
+        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.5\n");
+        text.Append("contact\t").Append(steam.Collisions ? "1" : "0").Append('\n');
+        text.Append("contact-key\t").Append(steam.ContactKey).Append('\n');
+        text.Append("physics-build\t").Append(steam.Collisions ? MapCatalog.SupportedBuild : "").Append('\n');
         text.Append("browser\t").Append(Clean(steam.Browser?.Status ?? "Refresh to find Steam lobbies")).Append('\n');
         foreach (var listing in steam.Browser?.Listings ?? [])
             text.Append("lobby\t").Append(listing.Id).Append('\t').Append(Clean($"{listing.Access} | {listing.Name} | {listing.Map} | {listing.Players}/{listing.Capacity}"))

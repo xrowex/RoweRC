@@ -28,6 +28,9 @@ public sealed class SteamSession : IDisposable
     private long lastAppearanceRead;
     private long metricStart = Environment.TickCount64;
     private int ticksMeasured, posesSent;
+    private readonly ContactWorld contactWorld = new();
+    private long localFrameAt;
+    private (string Run, long Seq) physicsFrame;
     public LobbyBrowser? Browser { get; private set; }
     public event Action? Changed;
     public string Status { get; private set; } = "Steam disconnected";
@@ -39,6 +42,8 @@ public sealed class SteamSession : IDisposable
     public bool Busy => pending || InLobby;
     public bool Hosting => InLobby && owner == SteamUser.GetSteamID();
     public string Role => InLobby ? Hosting ? "host" : "guest" : "idle";
+    public bool Collisions => InLobby && state?.Collisions == true;
+    public string ContactKey => Collisions ? state!.Room + "-" + state.Epoch : "";
     public IEnumerable<string> Players => peers.Values.Select(PeerDescription);
     public Func<MapEntry, bool>? CanLoadMap { get; set; }
     public SteamSession(GameBridge bridge, Func<string, MapEntry?> findMap, Func<string, MapEntry?>? findLevel = null)
@@ -88,7 +93,7 @@ public sealed class SteamSession : IDisposable
         callbacks.Add(Callback<LobbyDataUpdate_t>.Create(r => {
             if (InLobby && r.m_ulSteamIDLobby == lobby.m_SteamID && !Hosting) FollowHostState();
         }));
-        SetStatus($"Steam connected as {Persona} — mod 0.1.4, App ID {appId}");
+        SetStatus($"Steam connected as {Persona} — mod 0.1.5, App ID {appId}");
     }
     public void Host(MapEntry selected, bool isPublic = false)
     {
@@ -130,7 +135,7 @@ public sealed class SteamSession : IDisposable
         // a new level path with an old hash/epoch from separate metadata callbacks.
         var metadata = new Dictionary<string, string> {
             ["rrc_mod"] = "rowerc", ["rrc_protocol"] = Protocol.Version.ToString(),
-            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.4",
+            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.5",
             ["rrc_access"] = publicHost ? "public" : "friends",
             ["name"] = Persona + "'s RC Tandems" };
         foreach (var (key, value) in metadata) if (!SteamMatchmaking.SetLobbyData(lobby, key, value)) return false;
@@ -148,7 +153,7 @@ public sealed class SteamSession : IDisposable
         if (next == null)
         {
             SteamMatchmaking.LeaveLobby(joined);
-            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.4 or later."); return;
+            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.5 or later."); return;
         }
         var selected = findMap(next.Content);
         if (selected == null || !next.SameMap(selected))
@@ -166,9 +171,16 @@ public sealed class SteamSession : IDisposable
     {
         if (!Hosting || state == null) throw new InvalidOperationException("Only the host can change the lobby map.");
         CheckMap(selected);
-        var next = LobbyState.Create(selected, state.Room, state.Epoch + 1);
+        var next = LobbyState.Create(selected, state.Room, state.Epoch + 1) with { Collisions = state.Collisions };
         if (!PublishState(next)) throw new InvalidOperationException("Steam could not publish the map change.");
         state = next; map = selected; ResetPeersForMap(); RequestTravel(selected);
+    }
+    public void ToggleCollisions()
+    {
+        if (!Hosting || state == null) throw new InvalidOperationException("Only the host can change car contact.");
+        var next = state with { Epoch = state.Epoch + 1, Collisions = !state.Collisions };
+        if (!PublishState(next)) throw new InvalidOperationException("Could not publish contact mode.");
+        state = next; ResetPeersForMap();
     }
     private void FollowHostState()
     {
@@ -183,7 +195,8 @@ public sealed class SteamSession : IDisposable
         }
         try { CheckMap(selected); }
         catch (Exception e) { Leave(); SetStatus("Host changed maps: " + e.Message); return; }
-        state = next; map = selected; ResetPeersForMap(); RequestTravel(selected);
+        var travel = map == null || !next.SameMap(map);
+        state = next; map = selected; ResetPeersForMap(); if (travel) RequestTravel(selected);
         log.Write($"Following host map epoch={next.Epoch} level={next.Level}");
     }
     private void ResetPeersForMap()
@@ -191,6 +204,7 @@ public sealed class SteamSession : IDisposable
         var ids = peers.Keys.ToArray(); peers.Clear();
         foreach (var id in ids) peers[id] = new(id, Environment.TickCount64);
         bridge.WriteRemotes([]); lastFrame = default; localProblem = "";
+        contactWorld.Clear(); bridge.ClearContacts(); physicsFrame = default;
     }
     private void RequestTravel(MapEntry selected)
     {
@@ -240,6 +254,8 @@ public sealed class SteamSession : IDisposable
             UpdateStatus(now); LogSnapshot(local, now); return;
         }
         requestedMap = null; localProblem = "";
+        if (local != null && physicsFrame != (local.Run, local.Sequence))
+        { physicsFrame = (local.Run, local.Sequence); localFrameAt = now; }
         if (now - lastAppearanceRead > 1000 && local != null)
         {
             lastAppearanceRead = now; var appearance = bridge.ReadAppearance();
@@ -266,9 +282,24 @@ public sealed class SteamSession : IDisposable
         if (local != null && lastFrame != (local.Run, local.Sequence))
         {
             var bytes = PeerEnvelope.Pose(state, local).Encode();
+            if (bytes.Length > Protocol.MaxPacket) bytes = PeerEnvelope.Pose(state, local with { Physics = null }).Encode();
             foreach (var peer in peers.Values) Send(peer, bytes, peer.Route(now), false);
             if (peers.Count > 0) posesSent++;
             lastSend = now; lastFrame = (local.Run, local.Sequence);
+        }
+        if (Hosting && Collisions && local?.Physics != null)
+        {
+            var self = SteamUser.GetSteamID().m_SteamID;
+            var bodies = new List<ContactWorld.Input> { new(self, local, Math.Max(0, now - localFrameAt) / 1000.0) };
+            bodies.AddRange(peers.Values.Where(p => p.HasCar(now) && p.Car?.Physics != null).Select(p =>
+                new ContactWorld.Input(p.Id, p.Car!, (now - p.CarReceivedAt + Math.Max(0, p.PingMs) * .5) / 1000.0)));
+            foreach (var (id, hit) in contactWorld.Step(bodies, now))
+            {
+                if (id == self) bridge.Contact(ContactKey, hit);
+                else if (peers.TryGetValue(id, out var peer)) Send(peer,
+                    new PeerEnvelope(Protocol.Version, state.Room, state.Epoch, state.Content, "contact", state.Level, true, null, Contact: hit).Encode(), peer.Route(now), true);
+                log.Write($"Contact target={id} event={hit.Sequence} dv={hit.Dvx:F3},{hit.Dvy:F3} dw={hit.Dw:F3}");
+            }
         }
         bridge.WriteRemotes(peers.Values.Where(p => p.HasCar(now)).Select(p => new RemoteCar(p.Id,
             SteamFriends.GetFriendPersonaName(new(p.Id)), p.Car!, p.CarReceivedAt, p.Appearance.Current)));
@@ -289,6 +320,11 @@ public sealed class SteamSession : IDisposable
         if (budget.Count > 80) return;
         var packet = PeerEnvelope.Read(bytes, state);
         if (packet == null) { if (budget.Count == 0) log.Write($"Rejected packet peer={id} route={route} size={bytes.Length}"); return; }
+        if (packet.Contact is { } hit)
+        {
+            if (!Hosting && id == owner.m_SteamID) bridge.Contact(ContactKey, hit);
+            return;
+        }
         if (peer.PacketsReceived == 0) log.Write($"First peer packet peer={id} route={route} kind={packet.Kind} ready={packet.Ready} level={packet.Level}");
         peer.Accept(packet, route, now);
     }
@@ -306,7 +342,8 @@ public sealed class SteamSession : IDisposable
     {
         var now = Environment.TickCount64;
         var name = SteamFriends.GetFriendPersonaName(new(peer.Id));
-        if (peer.HasCar(now)) return $"{name}: car connected ({peer.Route(now)})";
+        if (peer.HasCar(now)) return $"{name}: {(peer.PingMs >= 0 ? $"{peer.PingMs} ms ping, " : "")}{peer.ArrivalJitterMs:F0} ms arrival jitter, {peer.SourceHz:F0} updates/s"
+            + (Collisions ? peer.Car?.Physics == null ? " | contact: update to 0.1.5 / preparing collider" : peer.Car.Physics.Driving ? " | contact ready" : " | car paused" : "");
         if (peer.PacketsReceived > 0 && !peer.Ready) return $"{name}: loading host's map";
         if (peer.SendError.Length > 0) return name + ": " + peer.SendError;
         if (peer.PacketsReceived > 0) return name + ": connection ready, waiting for car updates";
@@ -324,8 +361,9 @@ public sealed class SteamSession : IDisposable
         foreach (var peer in peers.Values)
         {
             var identity = new SteamNetworkingIdentity(); identity.SetSteamID64(peer.Id);
-            var connection = SteamNetworkingMessages.GetSessionConnectionInfo(ref identity, out var info, out _);
-            log.Write($"peer={peer.Id} packets={peer.PacketsReceived} poses={peer.PosesReceived} ready={peer.Ready} level={peer.Level} route={peer.Route(now)} modernState={connection} end={info.m_eEndReason} {info.m_szEndDebug}");
+            var connection = SteamNetworkingMessages.GetSessionConnectionInfo(ref identity, out var info, out var quality);
+            peer.PingMs = connection == ESteamNetworkingConnectionState.k_ESteamNetworkingConnectionState_Connected && peer.Route(now) == PeerRoute.Messages ? quality.m_nPing : -1;
+            log.Write($"peer={peer.Id} packets={peer.PacketsReceived} poses={peer.PosesReceived} ready={peer.Ready} level={peer.Level} route={peer.Route(now)} modernState={connection} pingMs={peer.PingMs} arrivalJitterMs={peer.ArrivalJitterMs:F1} sourceHz={peer.SourceHz:F1} poseGaps={peer.PoseGaps} qualityLocal={quality.m_flConnectionQualityLocal:F3} qualityRemote={quality.m_flConnectionQualityRemote:F3} queueUs={quality.m_usecQueueTime.m_SteamNetworkingMicroseconds} end={info.m_eEndReason} {info.m_szEndDebug}");
         }
     }
     private void RefreshMembers()
@@ -346,6 +384,7 @@ public sealed class SteamSession : IDisposable
         if (InLobby) SteamMatchmaking.LeaveLobby(lobby);
         lobby = CSteamID.Nil; RefreshMembers(); peers.Clear(); rate.Clear(); map = null; state = null; requestedMap = null;
         localProblem = networkFailure = ""; bridge.WriteRemotes([]);
+        contactWorld.Clear(); bridge.ClearContacts(); physicsFrame = default;
         SetStatus(initialized ? "Steam connected — lobby left" : "Steam disconnected");
     }
     public void Dispose()
