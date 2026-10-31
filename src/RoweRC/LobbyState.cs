@@ -24,7 +24,7 @@ public sealed record LobbyState(int Protocol, string Build, string Room, long Ep
 }
 
 public sealed record PeerEnvelope(int Protocol, string Room, long Epoch, string Content, string Kind,
-    string Level, bool Ready, CarFrame? Car)
+    string Level, bool Ready, CarFrame? Car, AppearanceChunk? Appearance = null, string Ack = "")
 {
     public static PeerEnvelope Hello(LobbyState state, CarFrame? local) =>
         new(RoweRC.Protocol.Version, state.Room, state.Epoch, state.Content, "hello", local?.Level ?? "", local?.Level == state.Level, null);
@@ -39,10 +39,13 @@ public sealed record PeerEnvelope(int Protocol, string Room, long Epoch, string 
             var packet = JsonSerializer.Deserialize<PeerEnvelope>(bytes);
             if (packet == null || packet.Protocol != RoweRC.Protocol.Version || packet.Room != state.Room || packet.Epoch != state.Epoch
                 || packet.Content != state.Content || packet.Level is null || packet.Level.Length > 240) return null;
+            if (packet.Ack is null || packet.Ack.Length != 0 && (packet.Ack.Length != 64 || !packet.Ack.All(char.IsAsciiHexDigit))) return null;
+            if (packet.Kind == "appearance") return packet.Car == null && packet.Appearance is { Valid: true } ? packet : null;
+            if (packet.Appearance != null) return null;
             if (packet.Kind == "hello") return packet.Car == null && (packet.Level == "" || RoweRC.Protocol.ValidLevel(packet.Level))
                 ? packet with { Ready = packet.Ready && packet.Level == state.Level } : null;
             return packet.Kind == "pose" && packet.Ready && packet.Level == state.Level
-                && packet.Car is { Sequence: >= 0, Run.Length: > 0 and <= 64, Pose.Valid: true } && packet.Car.Level == state.Level ? packet : null;
+                && packet.Car is { Sequence: >= 0, Run.Length: > 0 and <= 64, Valid: true } && packet.Car.Level == state.Level ? packet : null;
         }
         catch (Exception e) when (e is JsonException or NullReferenceException) { return null; }
     }
@@ -63,6 +66,12 @@ public sealed class PeerLink(ulong id, long now)
     public long PacketsReceived { get; private set; }
     public long PosesReceived { get; private set; }
     public string SendError { get; set; } = "";
+    public AppearanceReceiver Appearance { get; } = new();
+    public string AppearanceAck { get; private set; } = "";
+    public string OutgoingAppearance { get; set; } = "";
+    public int NextAppearanceChunk { get; set; }
+    public long LastAppearanceChunk { get; set; }
+    public long AppearanceSentAt { get; set; }
     public CarFrame? Car { get; private set; }
     public long CarReceivedAt { get; private set; }
     public PeerRoute Route(long clock) => clock - ModernReceived < 4000 || clock - LegacyReceived >= 4000 ? PeerRoute.Messages : PeerRoute.Legacy;
@@ -71,6 +80,8 @@ public sealed class PeerLink(ulong id, long now)
     {
         if (route == PeerRoute.Messages) ModernReceived = clock; else LegacyReceived = clock;
         PacketsReceived++; Level = packet.Level; Ready = packet.Ready;
+        if (packet.Kind == "hello") AppearanceAck = packet.Ack;
+        if (packet.Appearance != null) Appearance.Accept(packet.Appearance, clock);
         if (packet.Car is not { } car) return;
         if (Car != null && Car.Run == car.Run && Car.Sequence >= car.Sequence) return;
         Car = car; CarReceivedAt = clock; PosesReceived++;

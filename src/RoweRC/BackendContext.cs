@@ -87,6 +87,8 @@ internal sealed class BackendContext : ApplicationContext
             case "refresh": RefreshMaps(); break;
             case "update": _ = updater.CheckAsync(); break;
             case "host": VerifyGame(); Connect(); steam.Host(Selected()); break;
+            case "host-public": VerifyGame(); Connect(); steam.Host(Selected(), true); break;
+            case "browse": Connect(); steam.Browser!.Refresh(settings.SteamAppId); break;
             case "join": VerifyGame(); Connect(); steam.Join(ulong.Parse(argument)); break;
             case "leave": steam.Leave(); break;
             case "copy": if (steam.Code.Length > 0) Clipboard.SetText(steam.Code); break;
@@ -152,7 +154,11 @@ internal sealed class BackendContext : ApplicationContext
     {
         static string Clean(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var status = lastError.Length > 0 ? lastError : steam.Connected ? steam.Status : "Ready. Host or join to connect Steam.";
-        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.1\n");
+        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.2\n");
+        text.Append("browser\t").Append(Clean(steam.Browser?.Status ?? "Refresh to find Steam lobbies")).Append('\n');
+        foreach (var listing in steam.Browser?.Listings ?? [])
+            text.Append("lobby\t").Append(listing.Id).Append('\t').Append(Clean($"{listing.Access} | {listing.Name} | {listing.Map} | {listing.Players}/{listing.Capacity}"))
+                .Append('\t').Append(Clean(listing.Problem)).Append('\n');
         foreach (var peer in steam.Players.Take(3)) text.Append("peer\t").Append(Clean(peer)).Append('\n');
         text.Append("update\t").Append(Clean(updater.Status)).Append('\n');
         foreach (var m in maps) text.Append("map\t").Append(m.Manifest.Id).Append('\t').Append(Clean(m.Manifest.Name)).Append('\n');

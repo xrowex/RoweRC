@@ -1,13 +1,13 @@
-# RoweRC 0.1.1 — experimental
+# RoweRC 0.1.2 — experimental
 
-The host chooses the lobby map. Guests join by code and load that map automatically; subsequent host map changes propagate through a single committed lobby-state value. Guests cannot override the map while connected.
+F8 now includes a Steam lobby browser with public listings, friends-only room discovery, player counts, map names and one-click joining. Friends-only hosting remains available; public hosting is a separate explicit choice. The host still chooses the map and guests follow automatically.
 
-Reliable peer handshakes now operate during map loading. A Steam P2P fallback retries stalled primary connections. Send failures are retained in status/logs, with peer readiness and packet counters in `%LOCALAPPDATA%/RoweRC/bridge/session.log`.
+Remote cars now receive the sender's stock body, visible chassis, rims, tires, body paint and rim paint through checked, acknowledged appearance snapshots. Each remote car owns independent material instances. Four wheel transforms and four hub transforms synchronize steering and wheel motion, and six native motor loops synchronize volume and pitch with gain based on car-to-car distance.
 
-The in-game F8 menu checks a signed update feed. Future compatible releases download automatically and install after the game closes, with backups and rollback. Game files, settings and other mods are excluded from update payloads.
+A 120 ms snapshot buffer replaces per-packet chasing. Body and wheel rotations use quaternion interpolation; prediction is limited to 100 ms, and car resets clear the buffer.
 
-Both players must install 0.1.1 once; 0.1.0 lacks the updater and uses an incompatible wire protocol. Future updates use the signed feed. This remains an experimental mod using Steam development App ID 480. Remote cars mirror local appearance and do not have physical contact.
+Both players need 0.1.2 for the new visual/audio features. From 0.1.1, use F8 → Check for mod update, wait for the download, then close and reopen RC Tandems. Future startup checks use the signed feed. Stock game build 3c46a39f90 and Steam development App ID 480 remain required.
 
-Validation: Release build without warnings, 49 standalone state/protocol/import/update checks, both Lua modules parse under Lua 5.4, real Steam lobby create/leave smoke check. The previous build's local native rendering test showed a separate car made from 80 static mesh components; that local test was not a real peer connection.
+Validation: zero-warning Release build, 70 backend checks, 11 smoothing checks, and five Lua syntax checks. A real public Steam lobby was created and found by the browser. Native local tests confirmed a remote body swap to Toyota Supra, independent red body paint, different rims, moving wheel transforms, active motor volume/pitch and cleanup across 80 components; a complete 29,880-byte native appearance snapshot validated and reassembled from 17 chunks. The earlier 0.1.1 real two-PC session confirmed visible car updates through Steam Networking Messages.
 
-Two-PC verification on October 31, 2026: the guest confirmed a visible remote car. Local logs show a connected Steam Networking Messages session, matching Tandyz map paths and 1,985 accepted car updates without a connection error. Both-player visibility, map changes with a guest connected, and sustained driving under varied latency remain to be verified. The installed helper also verified the live signed update feed; applying a future release through the full download-and-exit flow remains to be tested.
+The new appearance, wheel and motor-audio features still need a two-PC driving test. Friend-room discovery, sustained driving under varied latency, connected-guest map changes, custom cooked maps and cosmetics/tune persistence across map travel also remain unverified. Cars remain visual ghosts without physical contact. Custom asset/texture downloads, voice and chat are not included.

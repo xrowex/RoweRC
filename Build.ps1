@@ -5,6 +5,8 @@ if (!(Test-Path tools\ue4ss\dwmapi.dll) -or !(Test-Path tools\steam_api64.dll)) 
 }
 dotnet publish src\RoweRC\RoweRC.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist\RoweRC
 if ($LASTEXITCODE) { throw 'Managed build failed.' }
+# Keep the pinned native library explicit even when incremental single-file publish skips it.
+Copy-Item tools\steam_api64.dll dist\RoweRC\steam_api64.dll -Force
 if (!(Test-Path tools\bootstrap\bootstrap.dll) -or (Get-Item src\bootstrap\bootstrap.cpp).LastWriteTimeUtc -gt (Get-Item tools\bootstrap\bootstrap.dll).LastWriteTimeUtc) {
     $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
     $vs = & $vswhere -latest -property installationPath
@@ -27,7 +29,7 @@ Copy-Item mod\RoweRC\Scripts\*.lua $scripts -Force
 "RoweRC : 1`nKeybinds : 1" | Set-Content (Join-Path $stage 'ue4ss\Mods\mods.txt')
 $helper = Join-Path $stage 'RoweRC'
 New-Item -ItemType Directory -Path $helper -Force | Out-Null
-Copy-Item dist\RoweRC\RoweRC.exe,dist\RoweRC\steam_api64.dll,tools\bootstrap\bootstrap.dll $helper -Force
+Copy-Item dist\RoweRC\RoweRC.exe,tools\steam_api64.dll,tools\bootstrap\bootstrap.dll $helper -Force
 if (Test-Path dist\RoweRC\licenses) { Copy-Item dist\RoweRC\licenses $helper -Recurse -Force }
 '{"GameFolder":"","SteamAppId":480}' | Set-Content (Join-Path $helper 'settings.json')
 Copy-Item README.md,CUSTOM_MAPS.md,THIRD_PARTY.md,Install.ps1 dist\RoweRC -Force

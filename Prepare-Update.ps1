@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([string]$Version = '0.1.1', [string]$Repository = 'xrowex/RoweRC')
+param([string]$Version = '0.1.2', [string]$Repository = 'xrowex/RoweRC')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid version or repository.' }
 $stage = Join-Path $PSScriptRoot 'dist\RoweRC\InstallFiles'
@@ -8,7 +8,10 @@ $paths = @(
     'RCDriftSim/Binaries/Win64/RoweRC/bootstrap.dll',
     'RCDriftSim/Binaries/Win64/RoweRC/steam_api64.dll',
     'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/main.lua',
-    'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/menu.lua'
+    'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/menu.lua',
+    'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/animation.lua',
+    'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/smoothing.lua',
+    'RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/appearance.lua'
 )
 $output = Join-Path $PSScriptRoot "dist\update-$Version.zip"
 if (Test-Path -LiteralPath $output) { Remove-Item -LiteralPath $output }
@@ -29,7 +32,7 @@ try {
         Version=$Version; GameBuild='3c46a39f90'; Size=(Get-Item -LiteralPath $output).Length
         Url="https://github.com/$Repository/releases/download/v$Version/update-$Version.zip"
         Sha256=(Get-FileHash -LiteralPath $output).Hash.ToLowerInvariant()
-        Notes='Host-controlled maps, connection handshakes, Steam fallback and automatic updates.'
+        Notes='Steam lobby browser, body/paint/rim sync, wheel and motor-audio sync, buffered interpolation.'
     } | ConvertTo-Json -Compress
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $signature = $rsa.SignData($bytes, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pss)

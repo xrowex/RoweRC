@@ -9,16 +9,18 @@ Steam friends lobbies and custom-map loading for the **Epic Windows build `3c46a
 - Loading the host's selected built-in level works.
 - A simulated remote pose feed renders a separate car made from 80 visible car components.
 - A real two-PC session received the host's car over Steam Networking Messages on Tandyz; the guest confirmed the car was visible. Local logs recorded 1,985 accepted car updates and matching host/guest map paths without a connection error.
-- 49 standalone checks cover packet validation, bridge freshness, map hashes, and ZIP imports. Lua 5.4 syntax checks pass.
+- The Steam browser discovers a real public RoweRC lobby. Friends-only rooms use a separate Steam friends lookup.
+- A local native peer fixture swaps to a Toyota Supra body, applies independent red paint and different rims across 80 components while the local car retains its purple paint. Moving wheel transforms, nonzero remote motor volume/pitch and peer cleanup were also checked. The complete 29,880-byte snapshot validates and reassembles from 17 reliable chunks.
+- 70 standalone checks cover packets, bridge freshness, maps, signed updates and appearance assembly; 11 Lua checks exercise snapshot smoothing. All five Lua modules parse under Lua 5.4.
 
-**Not yet verified:** both players seeing each other, host map changes with a connected guest, sustained tandem driving under varied latency, and a newly cooked custom map. Multiplayer remains experimental.
+**Not yet verified:** the new appearance/wheel/audio features across two PCs, both players seeing each other, host map changes with a connected guest, sustained tandem driving under varied latency, and a newly cooked custom map. Multiplayer remains experimental.
 
 ## Play with a friend
 
 1. Both players install the same prototype onto the supported RC Tandems build. Steam must be running and signed in on separate accounts.
 2. Launch RC Tandems normally. Press **F8**.
-3. The host selects a track and clicks **Host selected track**. Reopen F8 after map travel to see the code, then use **Copy lobby code**. The host can change the lobby map without making everyone leave.
-4. The friend pastes the code and clicks **Join friend's lobby — follow host map**. Guests do not select a map. The host's map loads automatically and guests follow subsequent changes.
+3. The host selects a track and clicks **Host friends-only track**, or **Host public track** to appear in the public browser. Reopen F8 after map travel to see the code, then use **Copy lobby code**. The host can change the lobby map without making everyone leave.
+4. The friend can click **Refresh Steam lobbies** and join a listed room, or paste the code and click **Join friend's lobby — follow host map**. Guests do not select a map. The host's map loads automatically and guests follow subsequent changes.
 5. Close F8 to drive. The mod requests the game's ResumeDrive action after a map load; the native **Drive / Enter** shortcut remains available if needed.
 
 The current default is Valve's **Spacewar development App ID 480**. Steam may show Spacewar as running. This is a development transport test, not an RC Tandems Steam release or production App ID. An authorized App ID can be configured in `RCDriftSim/Binaries/Win64/RoweRC/settings.json`; both players must use the same ID.
@@ -29,11 +31,13 @@ Close the game. In the extracted distribution, run `./Install.ps1` with PowerShe
 
 No Steam friend invitations are sent automatically. Share the lobby code yourself.
 
-Each player drives with the game's local physics. Remote cars are collision-free visual ghosts. Their appearance currently mirrors your local car; wheel steering/spin, remote cosmetics, audio, chat, voice, synchronized AI, physical contact, host migration, and automatic map downloads are not implemented. Native map travel can initialize the game's default car; cosmetic/tune persistence across raw level travel still needs validation.
+Each player drives with the game's local physics. Remote cars are collision-free visual ghosts. Version 0.1.2 adds stock body/chassis meshes, body and rim colors, rim/tire selections, wheel steering/rotation and the six native motor-audio layers. Appearance snapshots refresh when visible choices change, use independent materials per peer and are acknowledged over reliable Steam transport. Movement uses a 120 ms snapshot buffer, quaternion rotation interpolation and at most 100 ms of positional prediction; car resets clear the buffer. Both players need 0.1.2 for these additions. A 0.1.1 peer can still exchange body poses and uses the old appearance fallback.
+
+Only stock `/Game/Vehicle` assets and scalar/vector material overrides are replicated; there are no downloaded models, textures or sounds. Chat, voice, synchronized AI, physical contact, host migration, and automatic map downloads are not implemented. Native map travel can initialize the game's default car; cosmetic/tune persistence across raw level travel still needs validation.
 
 ## Automatic updates (0.1.1 onward)
 
-Both players must install **0.1.1 once** to replace the original 0.1.0 prototype. The wire protocol changed, so mixed versions are refused with an explicit message.
+Both players must install **0.1.1 once** to replace the original 0.1.0 prototype. The original 0.1.0 wire protocol is incompatible. Versions 0.1.1 and 0.1.2 share the pose protocol; the new visual features require 0.1.2 on both PCs.
 
 The helper checks a signed GitHub release feed at startup. A newer compatible mod is downloaded and SHA-256 checked, then installed after both RC Tandems and the helper have closed. Update signatures use a pinned RSA public key. The updater backs up replaced mod files, restores them after an interrupted installation, and never updates the base game, tuning, settings, maps or other mods.
 

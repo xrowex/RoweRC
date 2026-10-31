@@ -86,6 +86,65 @@ internal static class SelfTest
             Check(PeerEnvelope.Read(posePacket, advertised)?.Car == hostCar, "peer pose packet round trip");
             Check(PeerEnvelope.Read(PeerEnvelope.Hello(advertised, null).Encode(), advertised) is { Kind: "hello", Ready: false }, "peer handshake works before game data exists");
             Check(PeerEnvelope.Read(PeerEnvelope.Hello(advertised, car).Encode(), advertised) is { Kind: "hello", Ready: false }, "peer handshake works while a different map is loading");
+            var wheels = Enumerable.Range(0, 48).Select(i => i % 6 < 3 ? i * .125 : 170.0).ToArray();
+            var audio = Enumerable.Range(0, 18).Select(i => i % 3 == 0 ? .5 : 1.0).ToArray();
+            var motion = new CarMotion(100.25, wheels, audio);
+            var animatedCar = hostCar with { Motion = motion };
+            var animatedPacket = PeerEnvelope.Pose(advertised, animatedCar).Encode();
+            Check(animatedPacket.Length < Protocol.MaxPacket && PeerEnvelope.Read(animatedPacket, advertised)?.Car?.Motion?.Wheels.SequenceEqual(wheels) == true,
+                "wheel and audio payload fits packet budget and survives network round trip");
+            var animatedLine = line.Replace("\t0\t123\n", "\t" + motion.Tsv + "\t123\n");
+            Check(Protocol.ReadLocal(animatedLine)?.Motion?.Audio.SequenceEqual(audio) == true, "native wheel and motor layers survive local bridge parsing");
+            Check(Protocol.ReadLocal(animatedLine.Replace("100.25", "NaN")) == null, "reject non-finite animation timestamp");
+            Check(!new CarMotion(1, new double[47], audio).Valid, "reject missing wheel channels");
+            var loud = audio.ToArray(); loud[0] = 5;
+            Check(!new CarMotion(1, wheels, loud).Valid, "bound remote sound volume before playback");
+            var invalidMotion = animatedCar with { Motion = new CarMotion(1, wheels, loud) };
+            Check(PeerEnvelope.Read(PeerEnvelope.Pose(advertised, invalidMotion).Encode(), advertised) == null, "network rejects malformed animation instead of passing it to Unreal");
+            bridge.WriteRemotes([new(42, "friend", animatedCar, 0)]);
+            var remoteLine = File.ReadAllLines(Path.Combine(bridge.DirectoryPath, "remote.tsv"))[2].Split('\t');
+            Check(remoteLine.Length == 11 && remoteLine[8] == hostCar.Sequence.ToString() && CarMotion.Read(remoteLine[9])?.Valid == true,
+                "remote bridge preserves sequence and complete wheel/audio payload for smoothing");
+            var appearanceText = "RRA1\trun-1\t1\np\t1\tBody\t/Game/Vehicle/Test/Body.Body\t0\t0,0,0,0,0,0,1,1,1,1,1,1\nm\t1\t0\t/Game/Vehicle/Test/Paint.Paint\nv\t1\t0\tBodyColor\t0.8,0.1,0.2,1\nend\t1\t1\n";
+            var appearance = CarAppearance.Read(appearanceText);
+            Check(appearance is { Parts: 1, Run: "run-1" }, "validate stock mesh and independent paint snapshot");
+            Check(CarAppearance.Read(appearanceText.Replace("/Game/Vehicle/Test/Body.Body", "/Game/Maps/Other.Other")) == null,
+                "appearance cannot load maps, remote files or unrelated assets");
+            Check(CarAppearance.Read(appearanceText.Replace("0.8,0.1", "NaN,0.1")) == null, "reject invalid peer paint values");
+            Check(CarAppearance.Read(appearanceText.Replace("end\t1\t1", "end\t1\t2")) == null, "reject torn local appearance snapshot");
+            var receiver = new AppearanceReceiver();
+            var appearanceChunks = appearance!.Chunks();
+            var envelope = new PeerEnvelope(Protocol.Version, advertised.Room, advertised.Epoch, advertised.Content, "appearance", advertised.Level, true, null, appearanceChunks[0]);
+            Check(envelope.Encode().Length < Protocol.MaxPacket && PeerEnvelope.Read(envelope.Encode(), advertised)?.Appearance?.Valid == true,
+                "reliable appearance chunks fit transport packet limits");
+            foreach (var chunk in appearanceChunks.Reverse()) receiver.Accept(chunk, 100);
+            Check(receiver.Current?.Text == appearanceText, "appearance commits only after all chunks and checksum validate");
+            var corruptReceiver = new AppearanceReceiver();
+            var alteredChunk = appearanceChunks[0] with { Data = Convert.ToBase64String("tampered paint"u8.ToArray()) };
+            Check(!corruptReceiver.Accept(alteredChunk, 100) && corruptReceiver.Current == null, "reject corrupted appearance before creating Unreal objects");
+            Check(!receiver.Accept(appearanceChunks[0] with { Total = 99999 }, 100), "bound appearance assembly allocation");
+            var newerAppearance = CarAppearance.Read(appearanceText.Replace("run-1\t1", "run-1\t2").Replace("end\t1\t1", "end\t1\t2").Replace("0.8,0.1", "0.2,0.1"))!;
+            foreach (var chunk in newerAppearance.Chunks()) receiver.Accept(chunk, 200);
+            foreach (var chunk in appearanceChunks) receiver.Accept(chunk, 300);
+            Check(receiver.Current?.Revision == newerAppearance.Revision, "late appearance packets cannot rewind a newer paint choice");
+            var multiPart = appearanceText;
+            var bodyLines = appearanceText.Split('\n').Where(l => l.StartsWith("p\t") || l.StartsWith("m\t") || l.StartsWith("v\t")).ToArray();
+            var builder = new System.Text.StringBuilder("RRA1\trun-1\t1\n");
+            for (var i = 1; i <= 30; i++) foreach (var l in bodyLines) builder.Append(l.Replace("\t1\t", "\t" + i + "\t").Replace("\tBody\t", "\tBody" + i + "\t")).Append('\n');
+            builder.Append("end\t30\t1\n");
+            var largeAppearance = CarAppearance.Read(builder.ToString())!;
+            var assembly = new AppearanceReceiver(); var largeChunks = largeAppearance.Chunks();
+            foreach (var chunk in largeChunks.Skip(1).Reverse()) assembly.Accept(chunk, 400);
+            Check(largeChunks.Length > 1 && assembly.Current == null, "incomplete appearance never replaces visible parts");
+            assembly.Accept(largeChunks[0], 500);
+            Check(assembly.Current?.Parts == 30, "out-of-order reliable chunks assemble a complete multi-part car");
+            var ack = PeerEnvelope.Hello(advertised, hostCar) with { Ack = appearance.Revision };
+            Check(PeerEnvelope.Read(ack.Encode(), advertised)?.Ack == appearance.Revision, "peer acknowledges appearance revision for reliable late joins");
+            bridge.WriteRemotes([new(42, "friend", car!, 0, appearance)]);
+            Check(File.ReadAllText(Path.Combine(bridge.DirectoryPath, "appearance.42.tsv")) == appearanceText
+                && File.ReadAllText(Path.Combine(bridge.DirectoryPath, "remote.tsv")).Contains(appearance.Revision), "bridge associates appearance with the correct peer run");
+            bridge.WriteRemotes([new(42, "friend", car! with { Run = "new-run" }, 0, appearance)]);
+            Check(!File.ReadAllText(Path.Combine(bridge.DirectoryPath, "remote.tsv")).Contains(appearance.Revision), "stale appearance cannot attach to a different game run");
             var changedMap = LobbyState.Create(catalog[1], advertised.Room, 2);
             Check(PeerEnvelope.Read(posePacket, changedMap) == null, "old map packets are rejected after host changes maps");
             var returnToMap = LobbyState.Create(hostMap, advertised.Room, 3);

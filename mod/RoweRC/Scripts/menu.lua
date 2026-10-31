@@ -8,7 +8,8 @@ local oldCursor, wasDriving = false, false
 local viewportScale = 1
 local role = "idle"
 local hostControls = {}
-local mapButton, hostButton, joinButton, updateLabel
+local mapButton, hostButton, publicButton, joinButton, updateLabel, browserLabel
+local browserRows, lobbies, browserPage = {}, {}, 1
 local function valid(o) return o and o:IsValid() end
 local function read(name)
     local f = io.open(base .. name, "rb"); if not f then return "" end
@@ -48,7 +49,7 @@ local function button(parent, text, callback)
     return w
 end
 function UI.Invalidate()
-    UI.open = false; root = nil; tree = nil; buttons = {}; actions = {}; hostControls = {}
+    UI.open = false; root = nil; tree = nil; buttons = {}; actions = {}; hostControls = {}; browserRows = {}
 end
 function UI.Close()
     if valid(root) then root:RemoveFromParent() end
@@ -80,9 +81,24 @@ function UI.Open()
     local scroll = make("ScrollBox"); border:SetContent(scroll)
     local box = make("VerticalBox"); scroll:AddChild(box)
     add(box, label("ROWE RC  /  FRIENDS + MAPS", 24))
-    add(box, label("RoweRC 0.1.1  /  F8 closes  /  Steam development App ID 480", 12))
-    statusLabel = add(box, label("Waiting for Steam helper…", 13))
-    mapLabel = add(box, label("Track: loading catalog…", 18))
+    add(box, label("RoweRC 0.1.2  /  F8 closes  /  Steam development App ID 480", 12))
+    statusLabel = add(box, label("Waiting for Steam helper...", 13))
+    add(box, label("STEAM LOBBY BROWSER",18))
+    browserLabel=add(box,label("Refresh to find Steam lobbies",12))
+    button(box,"Refresh Steam lobbies",function() request("browse") end)
+    for index=1,6 do
+        local w=button(box,"",function()
+            local lobby=lobbies[(browserPage-1)*6+index]
+            if role=="idle" and lobby and lobby.problem=="" then request("join",lobby.id) end
+        end)
+        browserRows[index]=w; w:GetContent():SetAutoWrapText(true); w:SetVisibility(1)
+    end
+    local pages=make("HorizontalBox"); add(box,pages)
+    local previous,nextPage=make("VerticalBox"),make("VerticalBox")
+    pages:AddChildToHorizontalBox(previous):SetPadding({Left=0,Top=0,Right=16,Bottom=0}); pages:AddChildToHorizontalBox(nextPage)
+    button(previous,"< Lobby page",function() browserPage=math.max(1,browserPage-1) end)
+    button(nextPage,"Lobby page >",function() browserPage=math.min(math.max(1,math.ceil(#lobbies/6)),browserPage+1) end)
+    mapLabel = add(box, label("Track: loading catalog...", 18))
     local row = make("HorizontalBox"); add(box, row)
     local left, right = make("VerticalBox"), make("VerticalBox")
     row:AddChildToHorizontalBox(left):SetPadding({Left=0,Top=0,Right=16,Bottom=0})
@@ -91,17 +107,18 @@ function UI.Open()
     hostControls[#hostControls+1] = button(right, "Next track >", function() if role~="guest" and #maps>0 then selected=selected%#maps+1 end end)
     mapButton = button(box, "Load / change host map", function() if role~="guest" and maps[selected] then request("map", maps[selected].id); UI.Close() end end)
     hostControls[#hostControls+1] = mapButton
-    hostButton = button(box, "Host selected track", function() if maps[selected] then request("host", maps[selected].id) end end)
-    codeLabel = add(box, label("Lobby code: —", 16))
+    hostButton = button(box, "Host friends-only track", function() if maps[selected] then request("host", maps[selected].id) end end)
+    publicButton = button(box, "Host public track — visible in Steam browser", function() if maps[selected] then request("host-public",maps[selected].id) end end)
+    codeLabel = add(box, label("Lobby code: -", 16))
     button(box, "Copy lobby code", function() request("copy") end)
     joinInput = make("EditableTextBox")
     joinInput:SetHintText(FText("Paste your friend's lobby code here"))
     joinInput:SetForegroundColor({SpecifiedColor={R=.04,G=.10,B=.13,A=1},ColorUseRule=0})
     add(box, joinInput)
-    joinButton = button(box, "Join friend's lobby — follow host map", function() request("join", joinInput:GetText():ToString()) end)
+    joinButton = button(box, "Join friend's lobby - follow host map", function() request("join", joinInput:GetText():ToString()) end)
     button(box, "Leave lobby", function() request("leave") end)
     button(box, "Reload custom maps", function() request("refresh") end)
-    updateLabel = add(box, label("Checking mod updates…", 12))
+    updateLabel = add(box, label("Checking mod updates...", 12))
     button(box, "Check for mod update", function() request("update") end)
     add(box, label("Guests just join; the host chooses and changes maps. Custom ZIPs: %LOCALAPPDATA%/RoweRC/Maps/Inbox.", 12))
     root:AddToViewport(9000)
@@ -114,29 +131,44 @@ function UI.Open()
     if wasDriving then pc.Pawn:PauseDrive() end
     lib:SetInputMode_UIOnlyEx(pc, root, 0, false)
     UI.open = true
-    request("refresh")
+    request("browse")
 end
 function UI.Update()
     if not UI.open or not valid(root) then return end
     local text = read("ui-state.tsv")
     local heartbeat = 0
     local activeMap = ""
-    local newMaps = {}
+    local newMaps, newLobbies = {}, {}
     for line in text:gmatch("[^\r\n]+") do
         local k, value, extra = line:match("^([^\t]+)\t([^\t]*)\t?(.*)$")
-        if k == "role" then role = value
+        if k == "browser" then browserLabel:SetText(FText(value))
+        elseif k == "lobby" then
+            local caption,problem=extra:match("^([^\t]*)\t(.*)$")
+            newLobbies[#newLobbies+1]={id=value,caption=caption or extra,problem=problem or ""}
+        elseif k == "role" then role = value
         elseif k == "update" then updateLabel:SetText(FText(value))
         elseif k == "active" then activeMap = value
         elseif k == "time" then heartbeat = tonumber(value) or 0
         elseif k == "status" then statusLabel:SetText(FText(value))
-        elseif k == "code" then codeLabel:SetText(FText("Lobby code: " .. (value ~= "" and value or "—")))
+        elseif k == "code" then codeLabel:SetText(FText("Lobby code: " .. (value ~= "" and value or "-")))
         elseif k == "map" then newMaps[#newMaps+1] = {id=value,name=extra} end
     end
     if os.time() - heartbeat > 4 then statusLabel:SetText(FText("Steam helper offline. Start RoweRC.exe to enable hosting and maps.")) end
+    lobbies=newLobbies
+    browserPage=math.max(1,math.min(browserPage,math.max(1,math.ceil(#lobbies/6))))
+    for i,w in ipairs(browserRows) do
+        local lobby=lobbies[(browserPage-1)*6+i]
+        w:SetVisibility(lobby and 0 or 1)
+        if lobby then
+            w:GetContent():SetText(FText((role=="idle" and lobby.problem=="" and "Join | " or "")..lobby.caption..(lobby.problem~="" and " | "..lobby.problem or "")))
+            w:SetIsEnabled(role=="idle" and lobby.problem=="")
+        end
+    end
     if #newMaps > 0 then maps = newMaps end
     if role == "guest" then for index, map in ipairs(maps) do if map.id == activeMap then selected = index; break end end end
     for _, control in ipairs(hostControls) do if valid(control) then control:SetVisibility(role=="guest" and 1 or 0) end end
     hostButton:SetVisibility(role=="idle" and 0 or 1)
+    publicButton:SetVisibility(role=="idle" and 0 or 1)
     joinButton:SetVisibility(role=="idle" and 0 or 1)
     joinInput:SetVisibility(role=="idle" and 0 or 1)
     selected = math.max(1, math.min(selected, #maps))
