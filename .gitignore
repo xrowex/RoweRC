@@ -1,0 +1,11 @@
+src/**/bin/
+src/**/obj/
+dist/
+tools/python/
+tools/ue4ss/
+tools/*.zip
+tools/*.dll
+tools/steam-api-reference/
+tools/bootstrap/
+evidence/
+Maps/
