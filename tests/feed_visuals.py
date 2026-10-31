@@ -4,21 +4,25 @@ import hashlib,math,os,pathlib,time,sys
 bridge=pathlib.Path(os.environ['LOCALAPPDATA'])/'RoweRC/bridge'
 state=(bridge/'ui-state.tsv').read_text(encoding='utf-8')
 if 'role\tidle' not in state: raise RuntimeError('Leave the real lobby before running the local fixture')
-original=(bridge/'appearance.tsv').read_text(encoding='utf-8')
+external=len(sys.argv)>2
+original=pathlib.Path(sys.argv[2]).read_text(encoding='utf-8') if external else (bridge/'appearance.tsv').read_text(encoding='utf-8')
+local_run=(bridge/'local.1.tsv').read_text().split('\t')[1]
+header=original.splitlines()[0].split('\t'); header[1]=local_run
+original='\t'.join(header)+'\n'+original.split('\n',1)[1]
 peer='76561198000000001'
 lines=original.splitlines()
 red=[]
 for line in lines:
     p=line.split('\t')
-    if p[0]=='v' and p[3]=='BodyColor': p[4]='0.8,0.015,0.01,1'
-    if p[0]=='p' and p[2].startswith('RimDisplay'): p[3]='/Game/Vehicle/Wheels/SM_Rim_Option2.SM_Rim_Option2'
+    if not external and p[0]=='v' and p[3]=='BodyColor': p[4]='0.8,0.015,0.01,1'
+    if not external and p[0]=='p' and p[2].startswith('RimDisplay'): p[3]='/Game/Vehicle/Wheels/SM_Rim_Option2.SM_Rim_Option2'
     red.append('\t'.join(p))
 snapshot='\n'.join(red)+'\n'
 revision=hashlib.sha256(snapshot.encode()).hexdigest()
 (bridge/('appearance.'+peer+'.tsv')).write_bytes(snapshot.encode())
 try:
     for i in range(int(float(sys.argv[1] if len(sys.argv)>1 else 45)*20)):
-        if i==240:
+        if i==240 and not external:
             snapshot=snapshot.replace('/Game/Vehicle/Bodies/Nissan350Z/SM_Nissan350Z_Chassis2_Body.SM_Nissan350Z_Chassis2_Body',
                 '/Game/Vehicle/Bodies/ToyotaSupra/SM_ToyotaSupra_Body.SM_ToyotaSupra_Body')
             rows=snapshot.splitlines(); h=rows[0].split('\t'); e=rows[-1].split('\t'); h[2]=e[2]=str(int(h[2])+1)

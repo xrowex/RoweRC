@@ -86,7 +86,7 @@ public sealed class SteamSession : IDisposable
         callbacks.Add(Callback<LobbyDataUpdate_t>.Create(r => {
             if (InLobby && r.m_ulSteamIDLobby == lobby.m_SteamID && !Hosting) FollowHostState();
         }));
-        SetStatus($"Steam connected as {Persona} — mod 0.1.2, App ID {appId}");
+        SetStatus($"Steam connected as {Persona} — mod 0.1.3, App ID {appId}");
     }
     public void Host(MapEntry selected, bool isPublic = false)
     {
@@ -128,7 +128,7 @@ public sealed class SteamSession : IDisposable
         // a new level path with an old hash/epoch from separate metadata callbacks.
         var metadata = new Dictionary<string, string> {
             ["rrc_mod"] = "rowerc", ["rrc_protocol"] = Protocol.Version.ToString(),
-            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.2",
+            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.3",
             ["rrc_access"] = publicHost ? "public" : "friends",
             ["name"] = Persona + "'s RC Tandems" };
         foreach (var (key, value) in metadata) if (!SteamMatchmaking.SetLobbyData(lobby, key, value)) return false;
@@ -146,7 +146,7 @@ public sealed class SteamSession : IDisposable
         if (next == null)
         {
             SteamMatchmaking.LeaveLobby(joined);
-            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.2 or later."); return;
+            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.3 or later."); return;
         }
         var selected = findMap(next.Content);
         if (selected == null || !next.SameMap(selected))

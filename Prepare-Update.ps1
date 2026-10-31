@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([string]$Version = '0.1.2', [string]$Repository = 'xrowex/RoweRC')
+param([string]$Version = '0.1.3', [string]$Repository = 'xrowex/RoweRC')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid version or repository.' }
 $stage = Join-Path $PSScriptRoot 'dist\RoweRC\InstallFiles'
@@ -32,7 +32,7 @@ try {
         Version=$Version; GameBuild='3c46a39f90'; Size=(Get-Item -LiteralPath $output).Length
         Url="https://github.com/$Repository/releases/download/v$Version/update-$Version.zip"
         Sha256=(Get-FileHash -LiteralPath $output).Hash.ToLowerInvariant()
-        Notes='Steam lobby browser, body/paint/rim sync, wheel and motor-audio sync, buffered interpolation.'
+        Notes='Fix missing remote bodies; automatic checks during play and visible update-ready notification.'
     } | ConvertTo-Json -Compress
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $signature = $rsa.SignData($bytes, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pss)

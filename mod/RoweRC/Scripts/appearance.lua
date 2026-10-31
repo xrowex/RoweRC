@@ -96,8 +96,20 @@ end
 local function load(path,class)
     if not path or not (path:match("^/Game/Vehicle/[%w_/]+%.[%w_]+$") or path=="/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial") then return nil end
     local object=StaticFindObject(path)
-    if not valid(object) then LoadAsset(path:match("^(.+)%.[^%.]+$")); object=StaticFindObject(path) end
+    -- UE4SS queries GetAssetByObjectPath: preserve the .ObjectName suffix.
+    if not valid(object) then object=LoadAsset(path) end
     return valid(object) and object:IsA(class) and object or nil
+end
+function M.resolve(parts)
+    for _,definition in ipairs(parts) do
+        definition.loadedMesh=load(definition.mesh,"/Script/Engine.StaticMesh")
+        if not valid(definition.loadedMesh) then return nil,"Could not load vehicle mesh: "..tostring(definition.mesh) end
+        for _,m in pairs(definition.materials) do
+            m.loadedBase=load(m.asset,"/Script/Engine.MaterialInterface")
+            if not valid(m.loadedBase) then return nil,"Could not load vehicle material: "..tostring(m.asset) end
+        end
+    end
+    return parts
 end
 function M.parse(text,run)
     if not text or #text>131072 then return nil end
@@ -122,7 +134,7 @@ end
 function M.create(pawn,parts,group,mathLib)
     local actorClass=StaticFindObject("/Script/Engine.StaticMeshActor")
     for _,definition in ipairs(parts) do
-        local mesh=load(definition.mesh,"/Script/Engine.StaticMesh")
+        local mesh=definition.loadedMesh
         if valid(mesh) then
             local actor=pawn:GetWorld():SpawnActor(actorClass,pawn:K2_GetActorLocation(),pawn:K2_GetActorRotation())
             if valid(actor) then
@@ -135,7 +147,7 @@ function M.create(pawn,parts,group,mathLib)
                 target:SetMobility(2); target:SetCollisionEnabled(0); target:SetSimulatePhysics(false); actor:SetActorEnableCollision(false)
                 target:SetStaticMesh(mesh)
                 for slot,m in pairs(definition.materials) do
-                    local base=load(m.asset,"/Script/Engine.MaterialInterface")
+                    local base=m.loadedBase
                     if valid(base) then
                         target:SetMaterial(slot,base)
                         if next(m.scalars) or next(m.vectors) then

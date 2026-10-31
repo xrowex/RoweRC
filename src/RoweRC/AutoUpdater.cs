@@ -13,12 +13,13 @@ public sealed record PendingUpdate(string GameFolder, string Package, string Fee
 
 public sealed class AutoUpdater
 {
-    public const string CurrentVersion = "0.1.2";
+    public const string CurrentVersion = "0.1.3";
     public const string DefaultFeed = "https://github.com/xrowex/RoweRC/releases/latest/download/update.json";
     private readonly string gameFolder, feedUrl;
     private readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RoweRC", "updates");
     private readonly SessionLog log;
     private int checking;
+    public string ReadyVersion { get; private set; } = "";
     public string Status { get; private set; } = "Automatic updates enabled";
     public AutoUpdater(string gameFolder, string feedUrl, SessionLog log) { this.gameFolder = gameFolder; this.feedUrl = feedUrl; this.log = log; }
     public static UpdateRelease Verify(string signedJson)
@@ -36,7 +37,7 @@ public sealed class AutoUpdater
     }
     public async Task CheckAsync()
     {
-        if (Interlocked.Exchange(ref checking, 1) != 0) return;
+        if (ReadyVersion.Length > 0 || Interlocked.Exchange(ref checking, 1) != 0) return;
         try
         {
             if (feedUrl.Length == 0) { Status = "Automatic update feed is not configured"; return; }
@@ -82,7 +83,8 @@ public sealed class AutoUpdater
             if (!File.Exists(worker)) File.Copy(Environment.ProcessPath!, worker);
             var start = new ProcessStartInfo(worker) { UseShellExecute = false, CreateNoWindow = true, WindowStyle = ProcessWindowStyle.Hidden };
             start.ArgumentList.Add("--apply-update"); start.ArgumentList.Add(pendingPath);
-            Process.Start(start);
+            if (Process.Start(start) == null) throw new IOException("Could not start the update installer.");
+            ReadyVersion = release.Version;
             Status = "Mod " + release.Version + " downloaded; installs after you close RC Tandems";
             log.Write(Status);
         }

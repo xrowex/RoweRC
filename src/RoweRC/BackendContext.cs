@@ -16,7 +16,7 @@ internal sealed class BackendContext : ApplicationContext
     private readonly System.Windows.Forms.Timer timer = new() { Interval = 33 };
     private List<MapEntry> maps = [];
     private string requestSeen = "", lastError = "";
-    private long lastUi, lastProcessSeen = Environment.TickCount64;
+    private long lastUi, lastProcessSeen = Environment.TickCount64, lastUpdateCheck = Environment.TickCount64;
     private readonly Dictionary<string, int> needsRestart = [];
     public BackendContext(bool launchGame)
     {
@@ -61,6 +61,8 @@ internal sealed class BackendContext : ApplicationContext
         try
         {
             bridge.Flush(); steam.Tick();
+            if (settings.AutoUpdate && Environment.TickCount64 - lastUpdateCheck >= 10 * 60 * 1000)
+            { lastUpdateCheck = Environment.TickCount64; _ = updater.CheckAsync(); }
             var request = ReadRequest();
             if (request != null && request[0] != requestSeen)
             {
@@ -154,13 +156,14 @@ internal sealed class BackendContext : ApplicationContext
     {
         static string Clean(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var status = lastError.Length > 0 ? lastError : steam.Connected ? steam.Status : "Ready. Host or join to connect Steam.";
-        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.2\n");
+        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.3\n");
         text.Append("browser\t").Append(Clean(steam.Browser?.Status ?? "Refresh to find Steam lobbies")).Append('\n');
         foreach (var listing in steam.Browser?.Listings ?? [])
             text.Append("lobby\t").Append(listing.Id).Append('\t').Append(Clean($"{listing.Access} | {listing.Name} | {listing.Map} | {listing.Players}/{listing.Capacity}"))
                 .Append('\t').Append(Clean(listing.Problem)).Append('\n');
         foreach (var peer in steam.Players.Take(3)) text.Append("peer\t").Append(Clean(peer)).Append('\n');
         text.Append("update\t").Append(Clean(updater.Status)).Append('\n');
+        text.Append("update-ready\t").Append(updater.ReadyVersion).Append('\n');
         foreach (var m in maps) text.Append("map\t").Append(m.Manifest.Id).Append('\t').Append(Clean(m.Manifest.Name)).Append('\n');
         var path = Path.Combine(bridge.DirectoryPath, "ui-state.tsv");
         try { File.WriteAllText(path + ".tmp", text.ToString(), new UTF8Encoding(false)); File.Move(path + ".tmp", path, true); }

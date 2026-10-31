@@ -10,6 +10,7 @@ local role = "idle"
 local hostControls = {}
 local mapButton, hostButton, publicButton, joinButton, updateLabel, browserLabel
 local browserRows, lobbies, browserPage = {}, {}, 1
+local noticeRoot, noticeVersion, previewUntil
 local function valid(o) return o and o:IsValid() end
 local function read(name)
     local f = io.open(base .. name, "rb"); if not f then return "" end
@@ -49,8 +50,45 @@ local function button(parent, text, callback)
     return w
 end
 function UI.Invalidate()
+    if valid(noticeRoot) then noticeRoot:RemoveFromParent() end
+    noticeRoot=nil; noticeVersion=nil
     UI.open = false; root = nil; tree = nil; buttons = {}; actions = {}; hostControls = {}; browserRows = {}
 end
+local function updateNotice(version,preview)
+    if not version or not version:match("^%d+%.%d+%.%d+$") then
+        if valid(noticeRoot) then noticeRoot:RemoveFromParent() end
+        noticeRoot=nil; noticeVersion=nil; return
+    end
+    if valid(noticeRoot) and noticeVersion==version then return end
+    local pc=UE.GetPlayerController()
+    if not valid(pc) then return end
+    if valid(noticeRoot) then noticeRoot:RemoveFromParent() end
+    local lib=StaticFindObject("/Script/UMG.Default__WidgetBlueprintLibrary")
+    local layout=StaticFindObject("/Script/UMG.Default__WidgetLayoutLibrary")
+    noticeRoot=lib:Create(pc,StaticFindObject("/Script/UMG.UserWidget"),pc)
+    if not valid(noticeRoot) then return end
+    local nt=StaticConstructObject(StaticFindObject("/Script/UMG.WidgetTree"),noticeRoot)
+    noticeRoot.WidgetTree=nt
+    local border=StaticConstructObject(StaticFindObject("/Script/UMG.Border"),nt)
+    nt.RootWidget=border; border:SetBrushColor({R=.025,G=.15,B=.17,A=.97})
+    border:SetPadding({Left=16,Top=12,Right=16,Bottom=12})
+    local text=StaticConstructObject(StaticFindObject("/Script/UMG.TextBlock"),nt)
+    local scale=math.max(.5,layout:GetViewportScale(pc))
+    local font=text.Font; font.Size=math.floor(15/scale); text:SetFont(font)
+    text:SetColorAndOpacity({SpecifiedColor={R=.9,G=1,B=.96,A=1},ColorUseRule=0})
+    text:SetAutoWrapText(true)
+    text:SetText(FText(preview and "RoweRC update notification preview\nPreview only - no update is pending. Driving input stays active."
+        or "RoweRC "..version.." downloaded and ready\nClose and reopen RC Tandems to install. F8 for details."))
+    border:SetContent(text)
+    noticeRoot:SetVisibility(3) -- No hit testing: keep driving and menu input unchanged.
+    noticeRoot:AddToViewport(9001)
+    noticeRoot:SetDesiredSizeInViewport({X=510/scale,Y=95/scale})
+    noticeRoot:SetAlignmentInViewport({X=1,Y=0})
+    local viewport=layout:GetViewportSize(pc)
+    noticeRoot:SetPositionInViewport({X=viewport.X-24,Y=24},true)
+    noticeVersion=version
+end
+function UI.PreviewUpdateNotice() previewUntil=os.time()+10 end
 function UI.Close()
     if valid(root) then root:RemoveFromParent() end
     local pc = UE.GetPlayerController()
@@ -81,7 +119,7 @@ function UI.Open()
     local scroll = make("ScrollBox"); border:SetContent(scroll)
     local box = make("VerticalBox"); scroll:AddChild(box)
     add(box, label("ROWE RC  /  FRIENDS + MAPS", 24))
-    add(box, label("RoweRC 0.1.2  /  F8 closes  /  Steam development App ID 480", 12))
+    add(box, label("RoweRC 0.1.3  /  F8 closes  /  Steam development App ID 480", 12))
     statusLabel = add(box, label("Waiting for Steam helper...", 13))
     add(box, label("STEAM LOBBY BROWSER",18))
     browserLabel=add(box,label("Refresh to find Steam lobbies",12))
@@ -134,8 +172,11 @@ function UI.Open()
     request("browse")
 end
 function UI.Update()
-    if not UI.open or not valid(root) then return end
     local text = read("ui-state.tsv")
+    local time=tonumber(text:match("time\t(%d+)")) or 0
+    if previewUntil and os.time()<previewUntil then updateNotice("0.1.3",true)
+    else updateNotice(os.time()-time<=4 and text:match("update%-ready\t([^\r\n]*)") or nil) end
+    if not UI.open or not valid(root) then return end
     local heartbeat = 0
     local activeMap = ""
     local newMaps, newLobbies = {}, {}

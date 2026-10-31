@@ -11,7 +11,8 @@ Steam friends lobbies and custom-map loading for the **Epic Windows build `3c46a
 - A real two-PC session received the host's car over Steam Networking Messages on Tandyz; the guest confirmed the car was visible. Local logs recorded 1,985 accepted car updates and matching host/guest map paths without a connection error.
 - The Steam browser discovers a real public RoweRC lobby. Friends-only rooms use a separate Steam friends lookup.
 - A local native peer fixture swaps to a Toyota Supra body, applies independent red paint and different rims across 80 components while the local car retains its purple paint. Moving wheel transforms, nonzero remote motor volume/pitch and peer cleanup were also checked. The complete 29,880-byte snapshot validates and reassembles from 17 reliable chunks.
-- 70 standalone checks cover packets, bridge freshness, maps, signed updates and appearance assembly; 11 Lua checks exercise snapshot smoothing. All five Lua modules parse under Lua 5.4.
+- The 0.1.3 cold-asset loading fix resolved the real two-PC missing 180SX body/chassis report: all 80/80 parts loaded, and the guest confirmed the body visible. Complete visual replacement now waits for all assets.
+- 70 standalone checks cover packets, bridge freshness, maps, signed updates and appearance assembly; 11 Lua checks exercise snapshot smoothing and four cover asset-loading regressions. All five Lua modules parse under Lua 5.4.
 
 **Not yet verified:** the new appearance/wheel/audio features across two PCs, both players seeing each other, host map changes with a connected guest, sustained tandem driving under varied latency, and a newly cooked custom map. Multiplayer remains experimental.
 
@@ -39,7 +40,7 @@ Only stock `/Game/Vehicle` assets and scalar/vector material overrides are repli
 
 Both players must install **0.1.1 once** to replace the original 0.1.0 prototype. The original 0.1.0 wire protocol is incompatible. Versions 0.1.1 and 0.1.2 share the pose protocol; the new visual features require 0.1.2 on both PCs.
 
-The helper checks a signed GitHub release feed at startup. A newer compatible mod is downloaded and SHA-256 checked, then installed after both RC Tandems and the helper have closed. Update signatures use a pinned RSA public key. The updater backs up replaced mod files, restores them after an interrupted installation, and never updates the base game, tuning, settings, maps or other mods.
+The helper checks a signed GitHub release feed at startup and every 10 minutes while running. From 0.1.3, a non-interactive banner appears over the game once an update is downloaded and scheduled, telling you to close and reopen RC Tandems; F8 also shows its status. A newer compatible mod is downloaded and SHA-256 checked, then installed after both RC Tandems and the helper have closed. Update signatures use a pinned RSA public key. The updater backs up replaced mod files, restores them after an interrupted installation, and never updates the base game, tuning, settings, maps or other mods.
 
 F8 shows update status and includes **Check for mod update**. Set `AutoUpdate` to `false` in `RoweRC/settings.json` to disable startup checks. Update results and backups are under `%LOCALAPPDATA%/RoweRC/updates`. The signed feed is live at `https://github.com/xrowex/RoweRC/releases/latest/download/update.json`; the installed 0.1.1 helper successfully verified it and reported that the mod was up to date. The original 0.1.1 updater subsequently downloaded the public signed 0.1.2 package, waited for game/helper exit, installed all eight payload files and wrote a successful 0.1.2 receipt.
 

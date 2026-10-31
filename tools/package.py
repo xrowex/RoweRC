@@ -7,7 +7,7 @@ docs=['README.md','CUSTOM_MAPS.md','THIRD_PARTY.md','Install.ps1']
 files=[p for sub in ['InstallFiles','licenses'] for p in (stage/sub).rglob('*') if p.is_file()]
 files += [stage/name for name in docs]
 manifest={
-    'version':'0.1.2-experimental',
+    'version':'0.1.3-experimental',
     'supportedGameBuild':'3c46a39f90',
     'engine':'5.7',
     'steamAppId':480,
@@ -18,10 +18,10 @@ manifest={
 }
 (stage/'manifest.json').write_text(json.dumps(manifest,indent=2)+'\n',encoding='utf-8')
 files.append(stage/'manifest.json')
-binary=dist/'RoweRC-prototype-0.1.2.zip'
+binary=dist/'RoweRC-prototype-0.1.3.zip'
 with zipfile.ZipFile(binary,'w',zipfile.ZIP_DEFLATED,compresslevel=6) as z:
     for p in files: z.write(p,'RoweRC/'+p.relative_to(stage).as_posix())
-source=dist/'RoweRC-source-0.1.2.zip'
+source=dist/'RoweRC-source-0.1.3.zip'
 source_files=[root/p for p in docs+['Build.ps1','Prepare-Update.ps1','.gitignore']]
 source_files += [p for folder in ['src','mod','tests'] for p in (root/folder).rglob('*')
     if p.is_file() and not any(part in ['bin','obj','__pycache__'] for part in p.relative_to(root).parts)]

@@ -167,14 +167,31 @@ local function render(pawn, text, now, dt)
                 count=count+1; local id=p[1]; present[id]=true
                 if not ghosts[id] then ghosts[id]=createGhost(pawn) end
                 local group=ghosts[id]
-                if p[11] and p[11]:match("^%x+$") and #p[11]==64 and group.revision~=p[11] then
+                if p[11] and p[11]:match("^%x+$") and #p[11]==64 and group.revision~=p[11] and now>=(group.appearanceRetry or 0) then
                     local definitions=Appearance.parse(read("appearance."..id..".tsv",131072),p[8])
                     if definitions then
-                        for _,part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
-                        for i=#group,1,-1 do group[i]=nil end
-                        Appearance.create(pawn,definitions,group,mathLib)
-                        group.revision=p[11]
-                        log("Applied peer appearance "..id..": "..#group.." parts")
+                        local replacement={}
+                        local ok,failure=pcall(function()
+                            local resolved,reason=Appearance.resolve(definitions)
+                            if not resolved then error(reason) end
+                            Appearance.create(pawn,resolved,replacement,mathLib)
+                            assert(#replacement==#definitions,"Vehicle assembly is incomplete")
+                        end)
+                        if ok then
+                            for _,part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
+                            for i=#group,1,-1 do group[i]=nil end
+                            for i,part in ipairs(replacement) do group[i]=part end
+                            group.revision=p[11]; group.appearanceError=nil
+                            write("remote-appearance-error.txt","")
+                            log("Applied complete peer appearance "..id..": "..#group.."/"..#definitions.." parts")
+                        else
+                            for _,part in ipairs(replacement) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
+                            group.appearanceRetry=now+2
+                            if group.appearanceError~=tostring(failure) then
+                                group.appearanceError=tostring(failure); log("Appearance "..id..": "..tostring(failure))
+                                write("remote-appearance-error.txt",tostring(failure))
+                            end
+                        end
                     end
                 end
                 if group.buffer then
@@ -248,6 +265,7 @@ local function update()
                 pawn:ResumeDrive()
             elseif p[2] == "quit" then
                 StaticFindObject("/Script/Engine.Default__KismetSystemLibrary"):QuitGame(pawn,UE.GetPlayerController(),0,false)
+            elseif p[2] == "notice-test" then UI.PreviewUpdateNotice()
             elseif p[2] == "menu" then UI.Open()
             elseif p[2] == "dump" then
                 diagnose(pawn)
