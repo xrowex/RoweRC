@@ -41,7 +41,7 @@ Both players must install **0.1.1 once** to replace the original 0.1.0 prototype
 
 The helper checks a signed GitHub release feed at startup. A newer compatible mod is downloaded and SHA-256 checked, then installed after both RC Tandems and the helper have closed. Update signatures use a pinned RSA public key. The updater backs up replaced mod files, restores them after an interrupted installation, and never updates the base game, tuning, settings, maps or other mods.
 
-F8 shows update status and includes **Check for mod update**. Set `AutoUpdate` to `false` in `RoweRC/settings.json` to disable startup checks. Update results and backups are under `%LOCALAPPDATA%/RoweRC/updates`. The signed feed is live at `https://github.com/xrowex/RoweRC/releases/latest/download/update.json`; the installed 0.1.1 helper successfully verified it and reported that the mod was up to date. Applying a future release through the full download-and-exit flow still needs a live release test.
+F8 shows update status and includes **Check for mod update**. Set `AutoUpdate` to `false` in `RoweRC/settings.json` to disable startup checks. Update results and backups are under `%LOCALAPPDATA%/RoweRC/updates`. The signed feed is live at `https://github.com/xrowex/RoweRC/releases/latest/download/update.json`; the installed 0.1.1 helper successfully verified it and reported that the mod was up to date. The original 0.1.1 updater subsequently downloaded the public signed 0.1.2 package, waited for game/helper exit, installed all eight payload files and wrote a successful 0.1.2 receipt.
 
 ## Connection diagnostics
 
