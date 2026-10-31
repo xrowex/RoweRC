@@ -8,9 +8,10 @@ Steam friends lobbies and custom-map loading for the **Epic Windows build `3c46a
 - The F8 menu renders in the game; its mouse buttons can create and leave a real friends-only Steam lobby and show its code.
 - Loading the host's selected built-in level works.
 - A simulated remote pose feed renders a separate car made from 80 visible car components.
+- A real two-PC session received the host's car over Steam Networking Messages on Tandyz; the guest confirmed the car was visible. Local logs recorded 1,985 accepted car updates and matching host/guest map paths without a connection error.
 - 49 standalone checks cover packet validation, bridge freshness, map hashes, and ZIP imports. Lua 5.4 syntax checks pass.
 
-**Not yet verified:** joining with a second Steam account, real two-PC packet exchange, sustained tandem driving under latency, and a newly cooked custom map. This is not a tested multiplayer release.
+**Not yet verified:** both players seeing each other, host map changes with a connected guest, sustained tandem driving under varied latency, and a newly cooked custom map. Multiplayer remains experimental.
 
 ## Play with a friend
 
@@ -36,11 +37,11 @@ Both players must install **0.1.1 once** to replace the original 0.1.0 prototype
 
 The helper checks a signed GitHub release feed at startup. A newer compatible mod is downloaded and SHA-256 checked, then installed after both RC Tandems and the helper have closed. Update signatures use a pinned RSA public key. The updater backs up replaced mod files, restores them after an interrupted installation, and never updates the base game, tuning, settings, maps or other mods.
 
-F8 shows update status and includes **Check for mod update**. Set `AutoUpdate` to `false` in `RoweRC/settings.json` to disable startup checks. Update results and backups are under `%LOCALAPPDATA%/RoweRC/updates`. The feed must be published at `https://github.com/xrowex/RoweRC/releases/latest/download/update.json` before Internet checks can succeed.
+F8 shows update status and includes **Check for mod update**. Set `AutoUpdate` to `false` in `RoweRC/settings.json` to disable startup checks. Update results and backups are under `%LOCALAPPDATA%/RoweRC/updates`. The signed feed is live at `https://github.com/xrowex/RoweRC/releases/latest/download/update.json`; the installed 0.1.1 helper successfully verified it and reported that the mod was up to date. Applying a future release through the full download-and-exit flow still needs a live release test.
 
 ## Connection diagnostics
 
-Reliable handshakes now continue while a map is loading. The primary Steam Networking Messages route has a legacy Steam P2P fallback. F8 distinguishes a connecting peer, a peer loading the host map, an actual send error, and a car whose updates are arriving. Detailed counters, map paths and Steam connection errors are written to `%LOCALAPPDATA%/RoweRC/bridge/session.log`. Base 0.1.0 hid send failures and discarded packets during map mismatch; the user's real two-PC attempt exposed that gap. This update still requires a real two-account driving acceptance test.
+Reliable handshakes now continue while a map is loading. The primary Steam Networking Messages route has a legacy Steam P2P fallback. F8 distinguishes a connecting peer, a peer loading the host map, an actual send error, and a car whose updates are arriving. Detailed counters, map paths and Steam connection errors are written to `%LOCALAPPDATA%/RoweRC/bridge/session.log`. Base 0.1.0 hid send failures and discarded packets during map mismatch; the user's real two-PC attempt exposed that gap. In the 0.1.1 retry, the guest received and visibly rendered the host's car through the primary Messages route. The legacy fallback has not yet been verified across two PCs.
 
 ## Custom maps
 
