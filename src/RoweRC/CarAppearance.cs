@@ -5,14 +5,15 @@ using System.Text.RegularExpressions;
 
 namespace RoweRC;
 
-// Appearance is a bounded, declarative stock-asset snapshot. No executable data or files are transferred.
+// Bounded stock-asset snapshot, including the native Workbench shader used by rims.
+// No executable data or files are transferred.
 public sealed partial record CarAppearance(string Run, string Revision, string Text, int Parts, long Serial)
 {
     public const int MaxBytes = 128 * 1024, ChunkBytes = 1800;
     [GeneratedRegex(@"^[A-Za-z0-9_ -]{1,64}$")] private static partial Regex NamePattern();
     [GeneratedRegex(@"^/Game/Vehicle/[A-Za-z0-9_/]+\.[A-Za-z0-9_]+$")] private static partial Regex AssetPattern();
     public static bool Asset(string path) => path.Length <= 240 && !path.Contains("//")
-        && (AssetPattern().IsMatch(path) || path == "/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial")
+        && (AssetPattern().IsMatch(path) || path == "/Game/Environment/Workbench/M_Workbench.M_Workbench" || path == "/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial")
         && path[(path.LastIndexOf('/') + 1)..path.LastIndexOf('.')] == path[(path.LastIndexOf('.') + 1)..];
     private static bool Numbers(string value, int count, Func<int, double, bool> valid)
     {

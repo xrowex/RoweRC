@@ -27,6 +27,13 @@ print('PASS: missing parts fail the entire appearance preflight')
 local before=#calls
 assert(M.resolve({{mesh='/Game/Maps/Map.Map',materials={}}})==nil and #calls==before,'unrelated assets must not be loaded')
 print('PASS: appearance loading remains restricted to vehicle assets')
+local rimBase='/Game/Environment/Workbench/M_Workbench.M_Workbench'
+local rimParts={{mesh=mesh,materials={[0]={asset=rimBase}}}}
+local stockLoad=LoadAsset
+function LoadAsset(path) if path==rimBase then return object('/Script/Engine.MaterialInterface') end;return stockLoad(path) end
+assert(M.resolve(rimParts)==rimParts,'allow exact native rim color/metallic shader')
+assert(M.resolve({{mesh=mesh,materials={[0]={asset='/Game/Environment/Workbench/Other.Other'}}}})==nil,'do not allow arbitrary environment materials')
+print('PASS: exact rim shader can replicate without permitting unrelated environment assets')
 
 local model={IsValid=function()return true end,GetAddress=function()return 1 end}
 local scale=1

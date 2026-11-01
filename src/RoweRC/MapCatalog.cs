@@ -15,8 +15,8 @@ public sealed record MapEntry(MapManifest Manifest, string Folder, string Finger
 
 public static partial class MapCatalog
 {
-    public const string SupportedBuild = "3c46a39f90";
-    public const string SupportedExe = "5269616427df15ffc507970aa290193fddd60f83b7807231067455aa1a292dab";
+    public const string SupportedBuild = "1801ffbdfe";
+    public const string SupportedExe = "08da7cc9ca54d8f11dc05f70de7f33ed38014b33a82d2ccb4beb7f033592b4cf";
     public const long MaxMapBytes = 4L * 1024 * 1024 * 1024;
     [GeneratedRegex(@"^[a-z0-9][a-z0-9-]{0,63}$")] private static partial Regex IdPattern();
     [GeneratedRegex(@"^[A-Za-z0-9_-]+\.(pak|utoc|ucas)$")] private static partial Regex PayloadPattern();

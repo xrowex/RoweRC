@@ -24,7 +24,7 @@ public sealed record LobbyState(int Protocol, string Build, string Room, long Ep
 }
 
 public sealed record PeerEnvelope(int Protocol, string Room, long Epoch, string Content, string Kind,
-    string Level, bool Ready, CarFrame? Car, AppearanceChunk? Appearance = null, string Ack = "", ContactImpulse? Contact = null)
+    string Level, bool Ready, CarFrame? Car, AppearanceChunk? Appearance = null, string Ack = "", ContactImpulse? Contact = null, CarDamage? Damage = null)
 {
     public static PeerEnvelope Hello(LobbyState state, CarFrame? local) =>
         new(RoweRC.Protocol.Version, state.Room, state.Epoch, state.Content, "hello", local?.Level ?? "", local?.Level == state.Level, null);
@@ -40,6 +40,8 @@ public sealed record PeerEnvelope(int Protocol, string Room, long Epoch, string 
             if (packet == null || packet.Protocol != RoweRC.Protocol.Version || packet.Room != state.Room || packet.Epoch != state.Epoch
                 || packet.Content != state.Content || packet.Level is null || packet.Level.Length > 240) return null;
             if (packet.Ack is null || packet.Ack.Length != 0 && (packet.Ack.Length != 64 || !packet.Ack.All(char.IsAsciiHexDigit))) return null;
+            if (packet.Kind == "damage") return packet.Level==state.Level && packet.Ready && packet.Car==null && packet.Contact==null && packet.Appearance==null && packet.Damage is {Valid:true} ? packet : null;
+            if (packet.Damage!=null)return null;
             if (packet.Kind == "contact") return state.Collisions && packet.Level == state.Level && packet.Ready && packet.Car == null
                 && packet.Appearance == null && packet.Contact is { Valid: true } ? packet : null;
             if (packet.Contact != null) return null;
@@ -75,6 +77,8 @@ public sealed class PeerLink(ulong id, long now)
     public int NextAppearanceChunk { get; set; }
     public long LastAppearanceChunk { get; set; }
     public long AppearanceSentAt { get; set; }
+    public CarDamage? Damage { get; private set; }
+    public long LastDamageSent { get; set; }
     public CarFrame? Car { get; private set; }
     public long CarReceivedAt { get; private set; }
     public int PingMs { get; set; } = -1;
@@ -89,6 +93,7 @@ public sealed class PeerLink(ulong id, long now)
         PacketsReceived++; Level = packet.Level; Ready = packet.Ready;
         if (packet.Kind == "hello") AppearanceAck = packet.Ack;
         if (packet.Appearance != null) Appearance.Accept(packet.Appearance, clock);
+        if (packet.Damage is { } damage && (Damage==null || damage.Run!=Damage.Run || damage.Revision>Damage.Revision)) Damage=damage;
         if (packet.Car is not { } car) return;
         if (Car != null && Car.Run == car.Run && Car.Sequence >= car.Sequence) return;
         if (Car is { Motion: { } previous } && car.Motion is { } motion && Car.Run == car.Run)

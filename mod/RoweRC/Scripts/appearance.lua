@@ -1,11 +1,13 @@
 -- Stock vehicle visuals and independent per-peer material instances.
 local M={}
+local Damage=require("damage")
+local Assets=require("vehicle_assets")
 local function valid(o) return o and o:IsValid() end
 local function name(o) return o:GetFullName():match("%.([^%.]+)$") or "" end
 local function asset(o)
     if not valid(o) then return nil end
     local path=o:GetFullName():match("^[^ ]+ (.+)$")
-    if path and (path:match("^/Game/Vehicle/[%w_/]+%.[%w_]+$") or path=="/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial") then return path end
+    if path and (path:match("^/Game/Vehicle/[%w_/]+%.[%w_]+$") or path=="/Game/Environment/Workbench/M_Workbench.M_Workbench" or path=="/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial") then return path end
 end
 local function numbers(v)
     local result={}; for _,value in ipairs(v) do result[#result+1]=string.format("%.7g",value) end
@@ -49,7 +51,7 @@ function M.capture(pawn,each,animation,adapter,mathLib,run,serial,previous,now)
     end
     for _,source in ipairs(adapter.visualSources) do
     if valid(source) then
-        if not source.bHiddenInGame and source.bVisible and asset(source.StaticMesh) then
+        if not source.bHiddenInGame and (source.bVisible or Damage.isSource(source)) and asset(source.StaticMesh) then
         local ancestor,onCar=source,false
         for _=1,20 do
             if not valid(ancestor) then break end
@@ -112,10 +114,8 @@ local function csv(text)
     local values={}; for v in text:gmatch("[^,]+") do values[#values+1]=tonumber(v) end; return values
 end
 local function load(path,class)
-    if not path or not (path:match("^/Game/Vehicle/[%w_/]+%.[%w_]+$") or path=="/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial") then return nil end
-    local object=StaticFindObject(path)
-    -- UE4SS queries GetAssetByObjectPath: preserve the .ObjectName suffix.
-    if not valid(object) then object=LoadAsset(path) end
+    if not path or not (path:match("^/Game/Vehicle/[%w_/]+%.[%w_]+$") or path=="/Game/Environment/Workbench/M_Workbench.M_Workbench" or path=="/Engine/EngineMaterials/DefaultMaterial.DefaultMaterial") then return nil end
+    local object=Assets.load(path)
     return valid(object) and object:IsA(class) and object or nil
 end
 function M.resolve(parts)

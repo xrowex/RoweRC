@@ -1,4 +1,4 @@
--- Adapter for RCDriftSim build 3c46a39f90: four tire displays, four hubs, six motor loops.
+-- Adapter for RCDriftSim build 1801ffbdfe: four tire displays, four hubs, six motor loops.
 local M={}
 local corners={FL=1,FR=2,RL=3,RR=4}
 local audioIndex={RC_Idle=1,RC_Motor20=2,RC_Motor40=3,RC_Motor60=4,RC_Motor80=5,RC_Motor100=6}

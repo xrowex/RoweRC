@@ -36,7 +36,7 @@ public sealed record CarFrame(string Run, long Sequence, string Level, Pose Pose
     [JsonIgnore] public bool Valid => Pose is { Valid: true } && (Motion == null || Motion.Valid) && (Physics == null || Physics.Valid);
 }
 public sealed record WireFrame(int Protocol, string Room, string Content, CarFrame Car);
-public sealed record RemoteCar(ulong Id, string Name, CarFrame Frame, long ReceivedAt, CarAppearance? Appearance = null);
+public sealed record RemoteCar(ulong Id, string Name, CarFrame Frame, long ReceivedAt, CarAppearance? Appearance = null, CarDamage? Damage = null);
 
 public static partial class Protocol
 {
@@ -133,8 +133,10 @@ public sealed class GameBridge
                     && Atomic("appearance." + c.Id + ".tsv", appearance.Text)) writtenAppearances[c.Id] = appearance.Revision;
                 if (writtenAppearances.GetValueOrDefault(c.Id) == appearance.Revision) revision = appearance.Revision;
             }
+            var name=string.Concat(c.Name.EnumerateRunes().Where(r=>!System.Text.Rune.IsControl(r)).Take(48));
             text.Append(c.Id).Append('\t').Append(c.Frame.Pose.Tsv).Append('\t').Append(c.Frame.Run).Append('\t').Append(c.Frame.Sequence)
-                .Append('\t').Append(c.Frame.Motion?.Tsv ?? "0").Append('\t').Append(revision).Append('\n');
+                .Append('\t').Append(c.Frame.Motion?.Tsv ?? "0").Append('\t').Append(revision).Append('\t').Append(name).Append('\t').Append(c.Damage?.Run==c.Frame.Run ? c.Damage.Revision : 0)
+                .Append('\t').Append(c.Damage?.Run==c.Frame.Run ? c.Damage.Mesh : "").Append('\t').Append(c.Damage?.Run==c.Frame.Run ? c.Damage.Dents : "").Append('\n');
         }
         Atomic("remote.tsv", text.ToString());
     }

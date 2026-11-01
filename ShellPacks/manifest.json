@@ -1,0 +1,13 @@
+{
+  "Files": {
+    "RoweRC_optional_shell_P.utoc": "d38ac84fd19224a5a71757645ee79bc17c845324360204a00f1d7d2fc509a9f9",
+    "RoweRC_supra_rc_P.pak": "02b7a86e53f2f92336086cc12c61974d0dcd2e36fb1d45e9862d4bc4a69627e2",
+    "RoweRC_supra_rc_P.ucas": "a86d128302de8ef847af46a62c7bd4ceebbf59c1d0391eeb71ace59d6352fb9d",
+    "RoweRC_supra_rc_P.utoc": "69718ed34b4d617fc05347f2a1c86ed788833f0bdcc7f4d610c9994e12a8ab6e",
+    "RoweRC_optional_shell_P.ucas": "07283d989c8935a2285981f5f7d861d94959fe24b7306c59dc140ff3736fa28f",
+    "RoweRC_optional_shell_P.pak": "c3347ac49e8be105ca11f9dabcda21be6ea5e50500d3a0fd1bec3f4563e963fa"
+  },
+  "Engine": "5.7.4",
+  "Namespace": "/Game/Vehicle/RoweRC/Shells",
+  "Format": 1
+}

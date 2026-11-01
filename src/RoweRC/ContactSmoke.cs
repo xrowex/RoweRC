@@ -22,10 +22,21 @@ internal static class ContactSmoke
         var shape=ContactGeometry.Parse(physics.Shape)!;
         var p=new ContactVector(car.Pose.X*.01,car.Pose.Y*.01); var yaw=car.Pose.Yaw*Math.PI/180;
         var forward=new ContactVector(Math.Cos(yaw),Math.Sin(yaw));
-        var result=ContactGeometry.Solve(p,yaw,new(0,0),0,physics.Mass,physics.Inertia,shape,
-            p+forward*.4,yaw,forward*-1,0,physics.Mass,physics.Inertia,shape)
-            ?? throw new InvalidOperationException("Native silhouette fixture did not contact.");
-        var hit=new ContactImpulse(1,car.Run,physics.Generation,physics.Time,car.Pose.X,car.Pose.Y,result.A.X,result.A.Y,result.Wa);
+        var native = new NativePairMailbox(bridge.DirectoryPath);
+        var at=Environment.TickCount64;
+        var a=new NativePairMailbox.Body(p,yaw,new(0,0),0,physics.Mass,physics.Inertia,physics.Shape);
+        var b=new NativePairMailbox.Body(p+forward*.4,yaw,forward*-1,0,physics.Mass,physics.Inertia,physics.Shape);
+        native.Solve("smoke",a,b,at); native.Flush(at);
+        NativePairMailbox.Result? result=null;
+        while (Environment.TickCount64-at<140)
+        {
+            Thread.Sleep(5);native.Poll(Environment.TickCount64);
+            result=native.Solve("smoke",a,b,Environment.TickCount64);
+            if(result!=null)break;
+        }
+        if(result==null)throw new InvalidOperationException("Native pair fixture did not return a contact; inspect native-error.txt.");
+        var hit=new ContactImpulse(Math.Max(physics.Ack+1,DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()),car.Run,physics.Generation,physics.Time,
+            car.Pose.X,car.Pose.Y,result.A.X,result.A.Y,result.Wa,result.Pa.X,result.Pa.Y);
         bridge.Contact(key,hit);
         File.WriteAllText(Path.Combine(bridge.DirectoryPath,"contact-smoke.json"),JsonSerializer.Serialize(new { Before=car,Hit=hit,PacketBytes=wire.Length,Shapes=shape.Length,Vertices=shape.Sum(s=>s.Length) },new JsonSerializerOptions{WriteIndented=true}));
     }

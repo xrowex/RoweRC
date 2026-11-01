@@ -103,11 +103,16 @@ internal static class SelfTest
             Check(PeerEnvelope.Read(PeerEnvelope.Pose(advertised, invalidMotion).Encode(), advertised) == null, "network rejects malformed animation instead of passing it to Unreal");
             bridge.WriteRemotes([new(42, "friend", animatedCar, 0)]);
             var remoteLine = File.ReadAllLines(Path.Combine(bridge.DirectoryPath, "remote.tsv"))[2].Split('\t');
-            Check(remoteLine.Length == 11 && remoteLine[8] == hostCar.Sequence.ToString() && CarMotion.Read(remoteLine[9])?.Valid == true,
+            Check(remoteLine.Length == 15 && remoteLine[8] == hostCar.Sequence.ToString() && CarMotion.Read(remoteLine[9])?.Valid == true,
                 "remote bridge preserves sequence and complete wheel/audio payload for smoothing");
             var appearanceText = "RRA1\trun-1\t1\np\t1\tBody\t/Game/Vehicle/Test/Body.Body\t0\t0,0,0,0,0,0,1,1,1,1,1,1\nm\t1\t0\t/Game/Vehicle/Test/Paint.Paint\nv\t1\t0\tBodyColor\t0.8,0.1,0.2,1\nend\t1\t1\n";
             var appearance = CarAppearance.Read(appearanceText);
             Check(appearance is { Parts: 1, Run: "run-1" }, "validate stock mesh and independent paint snapshot");
+            var rimAppearance = appearanceText.Replace("/Game/Vehicle/Test/Paint.Paint", "/Game/Environment/Workbench/M_Workbench.M_Workbench")
+                .Replace("v\t1\t0\tBodyColor", "s\t1\t0\tMetallic\t0.75\nv\t1\t0\tColor");
+            Check(CarAppearance.Read(rimAppearance) != null, "native rim shader, color and metallic survive appearance validation");
+            Check(CarAppearance.Read(rimAppearance.Replace("M_Workbench.M_Workbench", "Other.Other")) == null,
+                "rim material exception does not allow arbitrary environment assets");
             Check(CarAppearance.Read(appearanceText.Replace("/Game/Vehicle/Test/Body.Body", "/Game/Maps/Other.Other")) == null,
                 "appearance cannot load maps, remote files or unrelated assets");
             Check(CarAppearance.Read(appearanceText.Replace("0.8,0.1", "NaN,0.1")) == null, "reject invalid peer paint values");
@@ -197,19 +202,36 @@ internal static class SelfTest
                 "contact packets require the host's active contact epoch");
             Check(PeerEnvelope.Read((hitPacket with { Contact=hitPacket.Contact! with { Dvx=100 } }).Encode(),contactState)==null,
                 "network contact impulses are bounded before reaching the game");
-            var world=new ContactWorld();
+            var world=new ContactWorld(referenceForTests:true);
             var bodyA=contactCar with { Pose=new(0,0,0,0,0,0) };
             var bodyB=contactCar with { Run="peer-run",Pose=new(43,0,0,0,0,0),Physics=physics with { Vx=0 } };
             var firstHits=world.Step([new(1,bodyA,0),new(2,bodyB,0)],1000).ToArray();
             Check(firstHits.Length==2 && firstHits[0].Hit.Sequence==firstHits[1].Hit.Sequence
                 && !world.Step([new(1,bodyA,0),new(2,bodyB,0)],1008).Any(), "one host event updates both owners and suppresses repeat impulses before acknowledgement");
             Check(!world.Step([new(1,bodyA,.3),new(2,bodyB,.3)],1200).Any(), "stale physical states cannot create contacts");
-            var sweptWorld=new ContactWorld();
+            var sweptWorld=new ContactWorld(referenceForTests:true);
             var fastCar=bodyA with { Pose=bodyA.Pose with { X=-49 },Physics=physics with { Vx=24.5 } };
             var stationary=bodyB with { Pose=bodyB.Pose with { X=0 } };
             sweptWorld.Step([new(1,fastCar,0),new(2,stationary,0)],1000).ToArray();
             Check(sweptWorld.Step([new(1,fastCar with { Sequence=fastCar.Sequence+1,Pose=fastCar.Pose with { X=49 } },0),new(2,stationary,0)],1040).Count()==2,
                 "swept samples catch a car crossing another between host ticks");
+            var dent=new CarDamage("run-1",1,"/Game/Vehicle/Bodies/Test/Body.Body","1:0:0.6");
+            Check(dent.Valid && !CarDamage.ValidDents("NaN:0:.5") && !CarDamage.ValidDents("0:0:.5") && !CarDamage.ValidDents("1:0:5"),"dent states reject non-finite directions, zero normals and excessive depth");
+            var customDent = dent with { Mesh = "/Game/Vehicle/RoweRC/Shells/supra_rc/SM_supra_rc.SM_supra_rc" };
+            Check(customDent.Valid && CarDamage.Read($"RRD1\trun-1\t1\t{customDent.Mesh}\t1:0:0.6\n") == customDent,
+                "custom-shell dents survive local bridge validation for peer replication");
+            Check(!(customDent with { Mesh = "/Game/Vehicle/RoweRC/Shells/../Other.Other" }).Valid
+                && !(customDent with { Mesh = "/Game/Maps/Test.Test" }).Valid, "damage remains restricted to canonical body/shell asset paths");
+            Check(CarDamage.Read("RRD1\trun-1\t2\t/Game/Vehicle/Bodies/Test/Body.Body\t\n") is {Dents:"",Revision:2},"a repair/reset preserves an empty dent snapshot");
+            var damagePacket=new PeerEnvelope(Protocol.Version,advertised.Room,advertised.Epoch,advertised.Content,"damage",advertised.Level,true,null,Damage:dent);
+            Check(PeerEnvelope.Read(damagePacket.Encode(),advertised)?.Damage==dent && PeerEnvelope.Read((damagePacket with {Damage=dent with {Mesh="/Game/Maps/Other"}}).Encode(),advertised)==null,"damage packets are scoped to valid vehicle body assets and the active room");
+            var dentPeer=new PeerLink(1,0);dentPeer.Accept(damagePacket,PeerRoute.Messages,1);dentPeer.Accept(damagePacket with {Damage=dent with {Revision=0,Dents=""}},PeerRoute.Messages,2);
+            Check(dentPeer.Damage==dent,"late damage packets cannot undo a newer dent state");
+            dentPeer.Accept(damagePacket with {Damage=dent with {Revision=2,Dents=""}},PeerRoute.Messages,3);
+            Check(dentPeer.Damage?.Dents=="","newer reset clears a remote shell's dents");
+            var namesBridge=new GameBridge(Path.Combine(temp,"names"));namesBridge.WriteRemotes([new(1,"Friend\t\r\n😀",contactCar,0,Damage:dent)]);
+            var remoteFields=File.ReadAllLines(Path.Combine(namesBridge.DirectoryPath,"remote.tsv"))[^1].Split('\t');
+            Check(remoteFields.Length==15 && remoteFields[11]=="Friend😀" && remoteFields[14]==dent.Dents,"Steam names retain Unicode and cannot inject bridge fields");
             var signedFeed = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "signed-update-fixture.json"));
             Check(AutoUpdater.Verify(signedFeed).Version == "9.9.9", "update signature is verified with the pinned public key");
             var signed = JsonSerializer.Deserialize<SignedUpdate>(signedFeed)!;
@@ -221,6 +243,11 @@ internal static class SelfTest
                 && !AutoUpdater.AllowedPath("RCDriftSim/Binaries/Win64/RoweRC/settings.json")
                 && !AutoUpdater.AllowedPath("RCDriftSim/Binaries/Win64/ue4ss/Mods/Other/Scripts/main.lua")
                 && !AutoUpdater.AllowedPath("RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/../../elsewhere.lua"), "updater cannot replace the game, settings, other mods or traversal paths");
+            Check(AutoUpdater.ShellPayloadPaths.Length == 6 && AutoUpdater.ShellPayloadPaths.All(AutoUpdater.AllowedPath)
+                && !AutoUpdater.AllowedPath("RCDriftSim/Content/Paks/RCDriftSim-Windows.pak")
+                && !AutoUpdater.AllowedPath("RCDriftSim/Content/Paks/~mods/Other.pak")
+                && !AutoUpdater.AllowedPath("RCDriftSim/Content/Paks/~mods/RoweRC/Shells/global.utoc"),
+                "shell updates permit exactly the six owned shell files without replacing base content");
             var updateGame = Path.Combine(temp, "update-game");
             const string scriptRelative = "RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/main.lua";
             const string menuRelative = "RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/menu.lua";
@@ -256,6 +283,21 @@ internal static class SelfTest
             }
             Reject(() => AutoUpdater.InstallPayload(unsafeUpdate, updateGame, Path.Combine(temp, "unsafe-backup"), []), "validate the entire update before changing any installed file");
             Check(File.ReadAllText(scriptPath) == "old script", "rejected update leaves existing scripts intact");
+            var shellZip = Path.Combine(temp, "shells.zip");
+            using (var z = ZipFile.Open(shellZip, ZipArchiveMode.Create))
+                foreach (var relative in AutoUpdater.ShellPayloadPaths)
+                    using (var w = new StreamWriter(z.CreateEntry(relative).Open())) w.Write("synthetic " + relative);
+            var shellChanges = new Dictionary<string, string?>();
+            AutoUpdater.InstallPayload(shellZip, updateGame, Path.Combine(temp, "shell-backup"), shellChanges);
+            Check(shellChanges.Count == 6 && AutoUpdater.ShellPayloadPaths.All(p => File.Exists(Path.Combine(updateGame, p))),
+                "complete shell update installs both IoStore triples");
+            Check(AutoUpdater.Rollback(shellChanges).Count == 0 && AutoUpdater.ShellPayloadPaths.All(p => !File.Exists(Path.Combine(updateGame, p))),
+                "shell update rollback removes only newly installed shell files");
+            var partialShellZip = Path.Combine(temp, "partial-shell.zip");
+            using (var z = ZipFile.Open(partialShellZip, ZipArchiveMode.Create))
+                using (var w = new StreamWriter(z.CreateEntry(AutoUpdater.ShellPayloadPaths[0]).Open())) w.Write("partial");
+            Reject(() => AutoUpdater.InstallPayload(partialShellZip, updateGame, Path.Combine(temp, "partial-shell-backup"), []),
+                "incomplete shell triplets are rejected before any installation");
             log.Add($"{log.Count} checks passed. Game integration and two-PC networking are NOT covered.");
             File.WriteAllLines(Path.Combine(AppContext.BaseDirectory, "self-test.txt"), log);
         }

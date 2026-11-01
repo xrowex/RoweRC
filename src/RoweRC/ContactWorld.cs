@@ -2,8 +2,9 @@ namespace RoweRC;
 
 // One host resolves contacts. Owners keep their native driving physics and apply
 // bounded velocity/angular-velocity deltas exactly once, then acknowledge them.
-public sealed class ContactWorld
+public sealed class ContactWorld(string? nativeDirectory = null, bool referenceForTests = false)
 {
+    private readonly NativePairMailbox? native = nativeDirectory == null ? null : new(nativeDirectory);
     public sealed record Input(ulong Id, CarFrame Frame, double Age);
     private sealed record Pending(ContactImpulse Hit, long At);
     private sealed record Body(Input Input, ContactVector P, double Yaw, ContactVector V, double W, CarPhysics Physics, ContactVector[][] Shape);
@@ -13,9 +14,10 @@ public sealed class ContactWorld
     private Dictionary<ulong, Body> previous = [];
     private long previousAt;
     private long sequence = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-    public void Clear() { pending.Clear(); lastContact.Clear(); previous.Clear(); }
+    public void Clear() { pending.Clear(); lastContact.Clear(); previous.Clear(); native?.Clear(); }
     public IEnumerable<(ulong Id, ContactImpulse Hit)> Step(IEnumerable<Input> inputs, long now)
     {
+        native?.Poll(now);
         var bodies = new List<Body>(); var results = new List<(ulong, ContactImpulse)>();
         foreach (var input in inputs)
         {
@@ -34,7 +36,7 @@ public sealed class ContactWorld
             foreach (var item in queue)
             {
                 var dv = new ContactVector(item.Hit.Dvx, item.Hit.Dvy); var age = (now - item.At) / 1000.0;
-                v += dv; w += item.Hit.Dw; p += dv * age; yaw += item.Hit.Dw * age;
+                v += dv; w += item.Hit.Dw; p += dv * age + new ContactVector(item.Hit.Dpx,item.Hit.Dpy); yaw += item.Hit.Dw * age;
             }
             bodies.Add(new(input, p, yaw, v, w, physics, shape));
         }
@@ -54,13 +56,24 @@ public sealed class ContactWorld
                 var t = step / (double)steps;
                 var pa = sweep ? oldA!.P * (1 - t) + a.P * t : a.P;
                 var pb = sweep ? oldB!.P * (1 - t) + b.P * t : b.P;
-                var hit = ContactGeometry.Solve(pa, a.Yaw, a.V, a.W, a.Physics.Mass, a.Physics.Inertia, a.Shape,
-                    pb, b.Yaw, b.V, b.W, b.Physics.Mass, b.Physics.Inertia, b.Shape);
+                if ((pb-pa).Length > .8) continue;
+                NativePairMailbox.Result? hit = null;
+                if (referenceForTests)
+                {
+                    var r = ContactGeometry.Solve(pa,a.Yaw,a.V,a.W,a.Physics.Mass,a.Physics.Inertia,a.Shape,pb,b.Yaw,b.V,b.W,b.Physics.Mass,b.Physics.Inertia,b.Shape);
+                    if (r is { } v) hit=new(v.A,v.Wa,default,v.B,v.Wb,default);
+                }
+                else if (native != null && (step==steps || ContactGeometry.Overlaps(pa,a.Yaw,a.Shape,pb,b.Yaw,b.Shape)))
+                {
+                    var key=$"{pair}:{a.Input.Frame.Run}:{a.Physics.Generation}:{b.Input.Frame.Run}:{b.Physics.Generation}";
+                    hit=native.Solve(key,new(pa,a.Yaw,a.V,a.W,a.Physics.Mass,a.Physics.Inertia,a.Physics.Shape),
+                        new(pb,b.Yaw,b.V,b.W,b.Physics.Mass,b.Physics.Inertia,b.Physics.Shape),now);
+                }
                 if (hit is not { } impulse) continue;
                 lastContact[pair] = now; var id = ++sequence;
-                ContactImpulse Make(Body body, ContactVector dv, double dw) => new(id, body.Input.Frame.Run, body.Physics.Generation,
-                    body.Physics.Time, body.Input.Frame.Pose.X, body.Input.Frame.Pose.Y, dv.X, dv.Y, dw);
-                var ha = Make(a, impulse.A, impulse.Wa); var hb = Make(b, impulse.B, impulse.Wb);
+                ContactImpulse Make(Body body, ContactVector dv, double dw, ContactVector dp) => new(id, body.Input.Frame.Run, body.Physics.Generation,
+                    body.Physics.Time, body.Input.Frame.Pose.X, body.Input.Frame.Pose.Y, dv.X, dv.Y, dw, dp.X, dp.Y);
+                var ha = Make(a, impulse.A, impulse.Wa, impulse.Pa); var hb = Make(b, impulse.B, impulse.Wb, impulse.Pb);
                 pending[a.Input.Id].Add(new(ha, now)); pending[b.Input.Id].Add(new(hb, now));
                 results.Add((a.Input.Id, ha)); results.Add((b.Input.Id, hb));
                 bodies[i] = a with { V = a.V + impulse.A, W = a.W + impulse.Wa };
@@ -68,6 +81,7 @@ public sealed class ContactWorld
                 break;
             }
         }
+        native?.Flush(now);
         previous = bodies.ToDictionary(b => b.Input.Id); previousAt = now;
         return results;
     }

@@ -13,7 +13,7 @@ public sealed record PendingUpdate(string GameFolder, string Package, string Fee
 
 public sealed class AutoUpdater
 {
-    public const string CurrentVersion = "0.1.5";
+    public const string CurrentVersion = "0.1.6";
     public const string DefaultFeed = "https://github.com/xrowex/RoweRC/releases/latest/download/update.json";
     private readonly string gameFolder, feedUrl;
     private readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RoweRC", "updates");
@@ -30,7 +30,7 @@ public sealed class AutoUpdater
         using var key = RSA.Create(); key.ImportFromPem(UpdateTrust.PublicKey);
         if (!key.VerifyData(payload, signature, HashAlgorithmName.SHA256, RSASignaturePadding.Pss)) throw new InvalidDataException("Update signature is invalid.");
         var release = JsonSerializer.Deserialize<UpdateRelease>(payload) ?? throw new InvalidDataException("Update release is missing.");
-        if (!Version.TryParse(release.Version, out _) || release.GameBuild != MapCatalog.SupportedBuild
+        if (!Version.TryParse(release.Version, out _) || release.GameBuild is not (MapCatalog.SupportedBuild or "3c46a39f90")
             || release.Size is < 1 or > 200 * 1024 * 1024 || release.Sha256.Length != 64
             || !Uri.TryCreate(release.Url, UriKind.Absolute, out var uri) || uri.Scheme != "https") throw new InvalidDataException("Invalid/incompatible update release.");
         return release;
@@ -98,9 +98,14 @@ public sealed class AutoUpdater
         { if (output.Length + n > limit) throw new InvalidDataException("Response exceeded size limit."); await output.WriteAsync(buffer.AsMemory(0, n)).ConfigureAwait(false); }
         return output.ToArray();
     }
+    internal static readonly string[] ShellPayloadPaths =
+        (from id in new[] { "optional_shell", "supra_rc" }
+         from extension in new[] { "pak", "utoc", "ucas" }
+         select $"RCDriftSim/Content/Paks/~mods/RoweRC/Shells/RoweRC_{id}_P.{extension}").ToArray();
     public static bool AllowedPath(string relative) => relative.StartsWith("RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/", StringComparison.Ordinal)
         && relative.EndsWith(".lua", StringComparison.Ordinal) && !relative.Contains("..") && !relative.Contains('\\')
-        || new[] { "RoweRC.exe", "bootstrap.dll", "steam_api64.dll" }.Any(name => relative == "RCDriftSim/Binaries/Win64/RoweRC/" + name);
+        || new[] { "RoweRC.exe", "bootstrap.dll", "steam_api64.dll" }.Any(name => relative == "RCDriftSim/Binaries/Win64/RoweRC/" + name)
+        || ShellPayloadPaths.Contains(relative, StringComparer.Ordinal);
 
     public static void Apply(string pendingPath)
     {
@@ -159,6 +164,8 @@ public sealed class AutoUpdater
                 if (Directory.Exists(parent) && File.GetAttributes(parent).HasFlag(FileAttributes.ReparsePoint)) throw new InvalidDataException("Update path contains a redirected directory.");
             targets.Add((entry, target, File.Exists(target) ? Path.Combine(backupRoot, entry.FullName) : null));
         }
+        if (seen.Any(p => ShellPayloadPaths.Contains(p, StringComparer.Ordinal)) && !ShellPayloadPaths.All(seen.Contains))
+            throw new InvalidDataException("Shell update is incomplete: both shells need matching .pak, .utoc and .ucas files.");
         foreach (var item in targets)
             if (item.Backup != null) { Directory.CreateDirectory(Path.GetDirectoryName(item.Backup)!); File.Copy(item.Path, item.Backup); }
         foreach (var item in targets)

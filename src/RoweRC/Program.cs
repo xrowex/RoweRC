@@ -8,7 +8,12 @@ internal static class Program
         if (args.Length == 2 && args[0] == "--apply-update") { AutoUpdater.Apply(args[1]); return; }
         if (args.FirstOrDefault() == "--pack-map") { MapPackCommand.Run(args); return; }
         if (args.Contains("--self-test")) { SelfTest.Run(); return; }
-        if (args.Contains("--contact-smoke-test")) { ContactSmoke.Run(); return; }
+        if (args.Contains("--contact-smoke-test"))
+        {
+            try { ContactSmoke.Run(); }
+            catch(Exception e){File.WriteAllText(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"RoweRC","bridge","contact-smoke-error.txt"),e.ToString());Environment.ExitCode=1;}
+            return;
+        }
         if (args.Contains("--steam-smoke-test"))
         {
             SteamSmokeTest.Run(); return;

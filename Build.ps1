@@ -1,5 +1,13 @@
+param([string]$ShellPackFolder = (Join-Path $PSScriptRoot 'ShellPacks'))
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
+$shellManifest=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'ShellPacks\manifest.json') -Raw | ConvertFrom-Json -AsHashtable
+foreach($name in $shellManifest.Files.Keys) {
+    $source=Join-Path $ShellPackFolder $name
+    if(-not (Test-Path -LiteralPath $source -PathType Leaf) -or (Get-FileHash -LiteralPath $source).Hash.ToLowerInvariant() -ne $shellManifest.Files[$name]) {
+        throw "Missing or changed cooked shell file: $source. Extract the six shell files from the release into ShellPacks, or pass -ShellPackFolder."
+    }
+}
 if (!(Test-Path tools\ue4ss\dwmapi.dll) -or !(Test-Path tools\steam_api64.dll)) {
     throw 'Restore the pinned UE4SS and Steamworks.NET native dependencies described in THIRD_PARTY.md into tools first.'
 }
@@ -7,7 +15,7 @@ dotnet publish src\RoweRC\RoweRC.csproj -c Release -r win-x64 --self-contained t
 if ($LASTEXITCODE) { throw 'Managed build failed.' }
 # Keep the pinned native library explicit even when incremental single-file publish skips it.
 Copy-Item tools\steam_api64.dll dist\RoweRC\steam_api64.dll -Force
-if (!(Test-Path tools\bootstrap\bootstrap.dll) -or (Get-Item src\bootstrap\bootstrap.cpp).LastWriteTimeUtc -gt (Get-Item tools\bootstrap\bootstrap.dll).LastWriteTimeUtc) {
+if (!(Test-Path tools\bootstrap\bootstrap.dll) -or (Get-ChildItem src\bootstrap\*.cpp | Where-Object LastWriteTimeUtc -gt (Get-Item tools\bootstrap\bootstrap.dll).LastWriteTimeUtc)) {
     $vswhere = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer\vswhere.exe'
     $vs = & $vswhere -latest -property installationPath
     $vcvars = Join-Path $vs 'VC\Auxiliary\Build\vcvars64.bat'
@@ -15,7 +23,8 @@ if (!(Test-Path tools\bootstrap\bootstrap.dll) -or (Get-Item src\bootstrap\boots
     Push-Location tools\bootstrap
     try {
         $cpp = Join-Path $PSScriptRoot 'src\bootstrap\bootstrap.cpp'
-        & cmd.exe /d /s /c ('"' + $vcvars + '" >nul && cl /nologo /O2 /MT /LD /EHsc "' + $cpp + '" /link /OUT:bootstrap.dll /SUBSYSTEM:WINDOWS')
+        $contactCpp = Join-Path $PSScriptRoot 'src\bootstrap\native_contact.cpp'
+        & cmd.exe /d /s /c ('"' + $vcvars + '" >nul && cl /nologo /std:c++20 /O2 /MT /LD /EHsc "' + $cpp + '" "' + $contactCpp + '" /link /OUT:bootstrap.dll /SUBSYSTEM:WINDOWS')
         if ($LASTEXITCODE) { throw 'Bootstrap build failed.' }
     } finally { Pop-Location }
 }
@@ -26,11 +35,14 @@ Copy-Item tools\ue4ss\ue4ss $stage -Recurse -Force
 $scripts = Join-Path $stage 'ue4ss\Mods\RoweRC\Scripts'
 New-Item -ItemType Directory -Path $scripts -Force | Out-Null
 Copy-Item mod\RoweRC\Scripts\*.lua $scripts -Force
+$shellStage=Join-Path $PSScriptRoot 'dist\RoweRC\InstallFiles\RCDriftSim\Content\Paks\~mods\RoweRC\Shells'
+New-Item -ItemType Directory -Path $shellStage -Force | Out-Null
+foreach($name in $shellManifest.Files.Keys){Copy-Item -LiteralPath (Join-Path $ShellPackFolder $name) -Destination (Join-Path $shellStage $name) -Force}
 "RoweRC : 1`nKeybinds : 1" | Set-Content (Join-Path $stage 'ue4ss\Mods\mods.txt')
 $helper = Join-Path $stage 'RoweRC'
 New-Item -ItemType Directory -Path $helper -Force | Out-Null
 Copy-Item dist\RoweRC\RoweRC.exe,tools\steam_api64.dll,tools\bootstrap\bootstrap.dll $helper -Force
 if (Test-Path dist\RoweRC\licenses) { Copy-Item dist\RoweRC\licenses $helper -Recurse -Force }
 '{"GameFolder":"","SteamAppId":480}' | Set-Content (Join-Path $helper 'settings.json')
-Copy-Item README.md,CUSTOM_MAPS.md,THIRD_PARTY.md,Install.ps1 dist\RoweRC -Force
+Copy-Item README.md,CUSTOM_MAPS.md,CUSTOM_SHELLS.md,RELEASE_NOTES.md,THIRD_PARTY.md,Install.ps1,Install-Shells.ps1 dist\RoweRC -Force
 Write-Output 'Staged prototype at dist/RoweRC. Preserve licenses/ when packaging.'

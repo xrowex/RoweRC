@@ -12,7 +12,7 @@ local hull=M.hull(circle); local inside=true
 for i,a in ipairs(hull) do local b=hull[i%#hull+1]
     for _,p in ipairs(circle) do if (b[1]-a[1])*(p[2]-a[2])-(b[2]-a[2])*(p[1]-a[1])< -1e-8 then inside=false end end
 end
-check(#hull<=32 and inside,'bounded support hull contains the source mesh silhouette')
+check(#hull<=48 and inside,'bounded support hull contains the source mesh silhouette')
 local function mesh(name,extent)
     return {IsValid=function() return true end,GetFullName=function() return name end,bAllowCPUAccess=true,
         GetNumSections=function() return 1 end,GetBounds=function() return {Origin={X=0,Y=0,Z=0},BoxExtent=extent} end}
@@ -30,8 +30,8 @@ local pawn={bDriving=true,GetAddress=function() return 1 end,GetTransform=functi
     BodyShell=component(bodyMesh,0,0)}
 local function put(offset,v) pawn[string.format('RoweContact_%x',offset)]=string.unpack('i8',string.pack('d',v)) end
 local function get(offset) return string.unpack('d',string.pack('i8',pawn[string.format('RoweContact_%x',offset)])) end
-for offset=0x7748,0x7778,8 do put(offset,0) end
-put(0x7748,1); put(0x7750,2); put(0x7758,1)
+for offset=0x7750,0x7780,8 do put(offset,0) end
+put(0x7568,1.3114);put(0x7580,.006);put(0x7750,1); put(0x7758,2); put(0x7760,1)
 local adapter={wheels={component(wheelMesh,12,-8),component(wheelMesh,12,8),component(wheelMesh,-12,-8),component(wheelMesh,-12,8)}}
 local mathLib={MakeRelativeTransform=function(_,source) return source end,
     TransformLocation=function(_,relative,v) return {X=v.X+relative.x,Y=v.Y+relative.y,Z=v.Z} end}
@@ -43,15 +43,15 @@ local count=0; for _ in text:gmatch(';') do count=count+1 end
 check(count==4,'body hull and all four tire cylinders are included')
 events='room-1\n7\trun-1\t1\t10\t100\t200\t0.5\t0\t0.1\n'
 capture(10.1); capture(10.2)
-check(math.abs(get(0x7768)-.5)<1e-8 and math.abs(get(0x7778)-.1)<1e-8,'owner applies contact velocity and yaw exactly once')
+check(math.abs(get(0x7770)-.5)<1e-8 and math.abs(get(0x7780)-.1)<1e-8,'owner applies contact velocity and yaw exactly once')
 events='old-room\n8\trun-1\t1\t10\t100\t200\t1\t0\t1\n'; capture(10.3)
-check(math.abs(get(0x7768)-.5)<1e-8,'old lobby contact events cannot affect the car')
-put(0x7748,0); put(0x7768,0); put(0x7778,0)
+check(math.abs(get(0x7770)-.5)<1e-8,'old lobby contact events cannot affect the car')
+put(0x7750,0); put(0x7770,0); put(0x7780,0)
 events='room-1\n9\trun-1\t1\t10\t100\t200\t1\t0\t1\n'; capture(10.4)
-check(get(0x7768)==0 and get(0x7778)==0,'reset generation rejects in-flight contact events')
+check(get(0x7770)==0 and get(0x7780)==0,'reset generation rejects in-flight contact events')
 events='room-1\n10\trun-1\t2\t8\t100\t200\t1\t0\t1\n'; capture(10.5)
-check(get(0x7768)==0,'expired contact events are acknowledged without applying a late bump')
-put(0x7750,99)
-check(not pcall(capture,10.6) and get(0x7768)==0,'native pose mismatch prevents all writes')
+check(get(0x7770)==0,'expired contact events are acknowledged without applying a late bump')
+put(0x7758,99)
+check(not pcall(capture,10.6) and get(0x7770)==0,'native pose mismatch prevents all writes')
 print(checks..' physics adapter checks passed')
 ''')

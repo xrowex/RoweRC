@@ -1,8 +1,9 @@
--- Native planar dynamics adapter, pinned to executable 52696164...292dab.
+-- Native planar dynamics adapter, pinned to executable 08da7cc9...92b4cf.
 -- The companion enables this only after verifying the supported game files.
 local M={}
+local Damage=require("damage")
 local registered,registrationError=pcall(function()
-    for offset=0x7748,0x7778,8 do
+    for _,offset in ipairs({0x7568,0x7580,0x7750,0x7758,0x7760,0x7768,0x7770,0x7778,0x7780}) do
         RegisterCustomProperty({Name=string.format("RoweContact_%x",offset),Type=PropertyTypes.Int64Property,
             BelongsToClass="/Script/RCDriftSim.RCDriftPawn",OffsetInternal=offset})
     end
@@ -24,16 +25,16 @@ function M.hull(points)
     for _,p in ipairs(unique) do while #lower>=2 and cross(lower[#lower-1],lower[#lower],p)<=1e-10 do table.remove(lower) end; lower[#lower+1]=p end
     for i=#unique,1,-1 do local p=unique[i]; while #upper>=2 and cross(upper[#upper-1],upper[#upper],p)<=1e-10 do table.remove(upper) end; upper[#upper+1]=p end
     table.remove(lower); table.remove(upper); for _,p in ipairs(upper) do lower[#lower+1]=p end
-    if #lower<=32 then return lower end
+    if #lower<=48 then return lower end
     -- Circumscribed support polygon retains the mesh footprint. At RC scale,
-    -- 32 support planes follow the silhouette closely without networked vertices.
+    -- 48 support planes follow the silhouette closely without networked vertices.
     local planes={}
-    for i=0,31 do local a=i*math.pi/16; local x,y=math.cos(a),math.sin(a); local d=-math.huge
+    for i=0,47 do local a=i*math.pi/24; local x,y=math.cos(a),math.sin(a); local d=-math.huge
         for _,p in ipairs(lower) do d=math.max(d,x*p[1]+y*p[2]) end
         planes[#planes+1]={x,y,d}
     end
     local result={}
-    for i,a in ipairs(planes) do local b=planes[i%32+1]; local det=a[1]*b[2]-a[2]*b[1]
+    for i,a in ipairs(planes) do local b=planes[i%48+1]; local det=a[1]*b[2]-a[2]*b[1]
         result[#result+1]={(a[3]*b[2]-a[2]*b[3])/det,(a[1]*b[3]-a[3]*b[1])/det}
     end
     return M.hull(result) -- Remove duplicate/collinear intersections at sharp mesh corners.
@@ -78,8 +79,8 @@ local function shape(pawn,adapter,mathLib)
         for j=2,3 do if extents[j]<extents[axis] then axis=j end end
         local first=axis%3+1; local second=first%3+1; local points={}
         local radius=math.max(extents[first],extents[second])
-        for side=-1,1,2 do for segment=0,11 do
-            local angle=segment*math.pi/6; local p={center[1],center[2],center[3]}
+        for side=-1,1,2 do for segment=0,15 do
+            local angle=segment*math.pi/8; local p={center[1],center[2],center[3]}
             p[axis]=p[axis]+side*extents[axis]; p[first]=p[first]+radius*math.cos(angle); p[second]=p[second]+radius*math.sin(angle)
             points[#points+1]=p
         end end
@@ -90,8 +91,8 @@ local function shape(pawn,adapter,mathLib)
         for _,p in ipairs(polygon) do text[#text+1]=string.format("%.4f:%.4f",p[1],p[2]) end
         encoded[#encoded+1]=table.concat(text,"|")
     end
-    assert(vertices<=96,"Collider exceeds point limit")
-    local text=table.concat(encoded,";"); assert(#text<=1700,"Collider exceeds packet budget")
+    assert(vertices<=128,"Collider exceeds point limit")
+    local text=table.concat(encoded,";"); assert(#text<=2300,"Collider exceeds packet budget")
     local bounds=body.StaticMesh:GetBounds().BoxExtent
     local scale=body:K2_GetComponentScale()
     local inertia=1.5*((bounds.X*scale.X*.02)^2+(bounds.Y*scale.Y*.02)^2)/12
@@ -100,31 +101,35 @@ end
 function M.capture(pawn,adapter,mathLib,now,contactKey,run,read,write)
     if not registered then error(registrationError) end
     if key~=contactKey then key=contactKey; lastAck=0 end
-    local sim=get(pawn,0x7748)
+    local sim=get(pawn,0x7750)
     if previousPawn~=pawn:GetAddress() or previousSim and sim<previousSim-.001 then generation=generation+1 end
     previousPawn=pawn:GetAddress(); previousSim=sim
     local p,r=pawn:K2_GetActorLocation(),pawn:K2_GetActorRotation()
-    local nativeX,nativeY,yaw=get(pawn,0x7758)*100,get(pawn,0x7750)*100,get(pawn,0x7760)
+    local nativeX,nativeY,yaw=get(pawn,0x7760)*100,get(pawn,0x7758)*100,get(pawn,0x7768)
     assert(finite(nativeX) and finite(nativeY) and finite(yaw) and math.abs(nativeX-p.X)<.2 and math.abs(nativeY-p.Y)<.2
         and math.abs((math.deg(yaw)-r.Yaw+180)%360-180)<.2,"Native dynamics layout mismatch")
     local events=read("contact-events.tsv",16384) or ""
     if events:match("^([^\r\n]+)")==key then
         for line in events:gmatch("[^\r\n]+") do
             local event={}; for v in (line.."\t"):gmatch("(.-)\t") do event[#event+1]=v end
-            if #event==9 then
+            if #event==9 or #event==11 then
                 local id=tonumber(event[1])
                 if id and id>lastAck then
                     lastAck=id
                     local gen,time,x,y,dx,dy,dw=tonumber(event[3]),tonumber(event[4]),tonumber(event[5]),tonumber(event[6]),tonumber(event[7]),tonumber(event[8]),tonumber(event[9])
-                    local speed=math.sqrt(get(pawn,0x7768)^2+get(pawn,0x7770)^2)
+                    local px,py=tonumber(event[10] or "0"),tonumber(event[11] or "0")
+                    local speed=math.sqrt(get(pawn,0x7770)^2+get(pawn,0x7778)^2)
                     if event[2]==run and gen==generation and finite(time) and now-time>=0 and now-time<.65 and pawn.bDriving
                         and finite(x) and finite(y) and (p.X-x)^2+(p.Y-y)^2<(80+speed*100*(now-time))^2
+                        and finite(px) and finite(py) and px*px+py*py<=.0004
                         and finite(dx) and finite(dy) and finite(dw) and dx*dx+dy*dy<=16.001 and math.abs(dw)<=10 then
                         local c,s=math.cos(yaw),math.sin(yaw)
-                        local u,v,w=get(pawn,0x7768),get(pawn,0x7770),get(pawn,0x7778)
+                        local u,v,w=get(pawn,0x7770),get(pawn,0x7778),get(pawn,0x7780)
                         local nextU,nextV,nextW=u+c*dx+s*dy,v-s*dx+c*dy,w+dw
                         if math.abs(nextU)<30 and math.abs(nextV)<30 and math.abs(nextW)<30 then
-                            put(pawn,0x7768,nextU); put(pawn,0x7770,nextV); put(pawn,0x7778,nextW)
+                            put(pawn,0x7760,get(pawn,0x7760)+px); put(pawn,0x7758,get(pawn,0x7758)+py)
+                            Damage.impact(pawn,dx,dy)
+                            put(pawn,0x7770,nextU); put(pawn,0x7778,nextV); put(pawn,0x7780,nextW)
                             write("contact-last.txt",string.format("Applied contact %d / dv %.3f %.3f / yaw %.3f",id,dx,dy,dw))
                         end
                     end
@@ -132,9 +137,11 @@ function M.capture(pawn,adapter,mathLib,now,contactKey,run,read,write)
             end
         end
     end
-    local hull,inertia=shape(pawn,adapter,mathLib)
-    local u,v,w=get(pawn,0x7768),get(pawn,0x7770),get(pawn,0x7778)
+    local hull=shape(pawn,adapter,mathLib)
+    local mass,inertia=get(pawn,0x7568),get(pawn,0x7580)
+    assert(finite(mass) and mass>=.1 and mass<=10 and finite(inertia) and inertia>=.0001 and inertia<=2,"Invalid native mass/inertia")
+    local u,v,w=get(pawn,0x7770),get(pawn,0x7778),get(pawn,0x7780)
     local c,s=math.cos(yaw),math.sin(yaw)
-    return string.format("%.9g,%d,%.8g,%.8g,%.8g,1.5,%.8g,%d,%d,%s",now,generation,c*u-s*v,s*u+c*v,w,inertia,lastAck,pawn.bDriving and 1 or 0,hull)
+    return string.format("%.9g,%d,%.8g,%.8g,%.8g,%.8g,%.8g,%d,%d,%s",now,generation,c*u-s*v,s*u+c*v,w,mass,inertia,lastAck,pawn.bDriving and 1 or 0,hull)
 end
 return M

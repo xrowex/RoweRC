@@ -1,13 +1,13 @@
-# RoweRC 0.1.4 — smoother remote cars
+# RoweRC 0.1.6 — shells, cleaner menu and cosmetic dents
 
-Remote cars now render on engine frames instead of a separate 16 ms polling loop. One movable parent drives the whole remote assembly; static body/chassis parts no longer need individual world-transform calls every frame. Wheels still animate relative to that parent.
+Both players can select the new **Pickup** and **Supra RC** shells from **F8 → Car**. The release includes all six cooked shell files, a saved rim-metallic slider, native-shell restoration, and a menu split into **Online / Car / Maps**. Shells retain the game's body color and the game retains local driving physics.
 
-The Steam helper replaces its coarse Windows Forms timer with a coalesced timer that dispatches onto the same STA thread. It sends each new local snapshot, removing the extra 50 ms gate that combined with the old timer to produce roughly 10–11 pose updates per second. The game continues to export approximately 30 snapshots per second. Both PCs should update for the higher send cadence.
+**Upgrade instructions:** update Epic RC Tandems to v2.2.5 / build `1801ffbdfe`, close the game, extract `RoweRC-prototype-0.1.6.zip`, and run `RoweRC/Install.ps1` in PowerShell 7. **Upgrading from 0.1.5 requires the full installer** because its updater only accepts the old game build and cannot install shell containers. The shell files are included in the archive; the new updater supports these files for future releases.
 
-Interpolation uses cubic body positions, a monotonic playback clock, bounded clock-speed correction, an adaptive 120–240 ms buffer, and small-error blending after prediction. The buffer expands for slow/jittery peers; that trades some visual latency for steadier motion. Prediction remains capped at 100 ms, stale cars expire, and actual resets snap instead of sliding.
+Cosmetic denting is included for body paint sections. Mod car-contact impulses can add dents; Reset Car repairs them. Dents do not alter wheel/chassis collision shapes. Wall impacts are not connected to deformation. Custom-shell dent messages now pass validation for reliable peer replication.
 
-Suspension compression no longer changes the appearance identity or repeatedly replaces the car. Actual body/paint/rim/tire choices still update. Appearance scans reuse component/material lookups, and UI/file polling is throttled independently of rendering.
+The shell-switching crash caused by retaining an Unreal asset wrapper after its mesh could unload is fixed. The corrected build passed 14 native shell changes and six forced garbage collections, with stock restoration working. Both shells cooked under UE 5.7.4 with zero errors and warnings and loaded in the installed game. Native deformation and reset checks, managed packet/updater checks and Lua lifecycle checks were also run.
 
-Validation: warning-free Release build; 70 backend checks, 17 smoothing checks, six appearance regression checks and five Lua syntax checks. A native local fixture measured 202.9 remote-render updates/s with a 20 Hz input, a 146 ms buffer and zero predicted frames in that sample; local export measured 30.5 Hz. These are observed samples, not guaranteed frame rates. All 80 appearance parts remained intact and peer cleanup completed without a Lua error. Fresh two-PC driving acceptance is still needed to judge the remaining jitter and new send cadence.
+Experimental contact uses the game's pinned native pair solver with actual mass/inertia, an upright body footprint and four tire shapes. Contact starts off and can be enabled by the host in Online. Native car contact, cosmetic dents and Steam names are included, but real two-PC impacts and custom-shell/dent visuals remain unverified. No newly cooked custom track is included.
 
-Update from F8 → Check for mod update, wait for the download, then close and reopen RC Tandems. Existing signed updates, host maps and missing-body fixes remain included.
+Steam transport still uses development App ID 480. Both peers need this same release and the supported game build.

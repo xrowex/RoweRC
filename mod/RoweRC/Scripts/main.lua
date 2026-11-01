@@ -1,4 +1,4 @@
--- RoweRC prototype for RC Tandems build 3c46a39f90 / UE 5.7.
+-- RoweRC prototype for RC Tandems build 1801ffbdfe / UE 5.7.
 -- All Unreal object access occurs in queued game-thread work. File transport is local only.
 local UE = require("UEHelpers")
 local UI = require("menu")
@@ -6,6 +6,12 @@ local Animation = require("animation")
 local Smooth = require("smoothing")
 local Appearance = require("appearance")
 local Physics = require("physics")
+local Native = require("native")
+local Export = require("export")
+local Names = require("names")
+local Damage = require("damage")
+local Rims = require("rims")
+local Shells = require("shells")
 local base = (os.getenv("LOCALAPPDATA") or ".") .. "/RoweRC/bridge/"
 local run = tostring(os.time()) .. "-" .. tostring(math.random(100000, 999999))
 local sequence, pending, commandSeen = 0, false, nil
@@ -58,7 +64,7 @@ local function clear()
     -- Never dereference objects from the world being unloaded.
     if not transitioning then
         for _, group in pairs(ghosts) do
-            Animation.destroyAudio(group)
+            Damage.destroy(group); Animation.destroyAudio(group)
             for _, part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
             if valid(group.root) then group.root:K2_DestroyActor() end
         end
@@ -67,8 +73,12 @@ local function clear()
 end
 
 RegisterLoadMapPreHook(function()
+    Rims.clear()
+    Shells.clear()
+    Export.clear()
+    Damage.clear()
     if UI.open then UI.Close() else UI.Invalidate() end
-    for _,group in pairs(ghosts) do Animation.destroyAudio(group) end
+    for _,group in pairs(ghosts) do Damage.destroy(group); Animation.destroyAudio(group) end
     cachedPawn=nil; perf={started=-1,ticks=0,exports=0,applies=0}; lastUiPoll=-1; lastRemotePoll=-1; lastCommandPoll=-1; appearanceIdentity = nil; lastAppearance = -1; adapter = nil; lastExport = -1; lastTick = nil; transitioning = true; ghosts = {}; levelName = ""; lastRemoteText = ""
 end)
 RegisterLoadMapPostHook(function() transitioning = false end)
@@ -117,7 +127,7 @@ local function createGhost(pawn)
     local parent = pawn:GetTransform()
     eachComponent(pawn, "StaticMeshComponent", function(source)
         if #group >= 160 then return end
-        if not valid(source) or source.bHiddenInGame or not source.bVisible or not valid(source.StaticMesh) then return end
+        if not valid(source) or source.bHiddenInGame or (not source.bVisible and not Damage.isSource(source)) or not valid(source.StaticMesh) then return end
         local ancestor, onCar = source, false
         for _ = 1, 20 do
             if not valid(ancestor) then break end
@@ -159,7 +169,7 @@ local function render(pawn, text, now, dt)
     local count = 0
     for line in text:gmatch("[^\r\n]+") do
         local p=split(line)
-        if (#p==11 or #p==10 or #p==7) and p[1]:match("^%d+$") and #p[1]<=20 then
+        if (#p==15 or #p==12 or #p==11 or #p==10 or #p==7) and p[1]:match("^%d+$") and #p[1]<=20 then
             local pose,good={},true
             for i=2,7 do
                 pose[i-1]=tonumber(p[i])
@@ -189,6 +199,7 @@ local function render(pawn, text, now, dt)
                             assert(#replacement==#definitions,"Vehicle assembly is incomplete")
                         end)
                         if ok then
+                            Damage.destroy(group)
                             for _,part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
                             for i=#group,1,-1 do group[i]=nil end
                             for i,part in ipairs(replacement) do group[i]=part end
@@ -213,6 +224,11 @@ local function render(pawn, text, now, dt)
                         local location={X=v[1],Y=v[2],Z=v[3]}
                         local transform=mathLib:MakeTransform(location,{Pitch=v[4],Yaw=v[5],Roll=v[6]},pawn:GetActorScale3D())
                         group.root:K2_SetActorTransform(transform,false,{},true)
+                        Names.update(group,p[12],mathLib,UE.GetPlayerController(),location)
+                        if now>=(group.damageRetry or 0) then
+                            local ok,reason=pcall(Damage.remote,group,p[14] or "",p[15] or "",mathLib)
+                            if not ok then write("remote-damage-error.txt",tostring(reason));group.damageRetry=now+5 end
+                        end
                         group.profileFrames=(group.profileFrames or 0)+1
                         if sample.predicting then group.profilePredicted=(group.profilePredicted or 0)+1 end
                         group.profileDelay=sample.delay
@@ -239,7 +255,7 @@ local function render(pawn, text, now, dt)
     end
     for id,group in pairs(ghosts) do
         if not present[id] then
-            Animation.destroyAudio(group)
+            Damage.destroy(group); Animation.destroyAudio(group)
             for _,part in ipairs(group) do if valid(part.actor) then part.actor:K2_DestroyActor() end end
             if valid(group.root) then group.root:K2_DestroyActor() end
             ghosts[id]=nil
@@ -270,10 +286,12 @@ local function update()
     if currentLevel ~= levelName then clear(); levelName = currentLevel end
     local gameplay = StaticFindObject("/Script/Engine.Default__GameplayStatics")
     local now = gameplay:GetRealTimeSeconds(pawn)
+    Native.update(pawn,read,write)
+    Export.update(write)
     local dt = lastTick and math.max(.0001,math.min(.25,now-lastTick)) or .016; lastTick=now
     perf.ticks=perf.ticks+1
     if perf.started<0 then perf.started=now end
-    if now-lastUiPoll>=.2 then lastUiPoll=now; UI.Update() end
+    if now-lastUiPoll>=.2 then lastUiPoll=now; Shells.update(pawn); UI.Update() end
     local command
     if now-lastCommandPoll>=.05 then lastCommandPoll=now; command=read("command.tsv") end
     if command then
@@ -290,6 +308,18 @@ local function update()
                 pawn:ResumeDrive()
             elseif p[2] == "quit" then
                 StaticFindObject("/Script/Engine.Default__KismetSystemLibrary"):QuitGame(pawn,UE.GetPlayerController(),0,false)
+            elseif p[2] == "dent-test" then Damage.impact(pawn,1,0)
+            elseif p[2] == "dent-verify" then
+                local ok,result=pcall(Damage.verify,pawn)
+                write('dent-verify.txt',p[1]..'\t'..(ok and result or ('error='..tostring(result))))
+            elseif p[2] == "shell" then
+                local ok,result=pcall(Shells.select,pawn,p[3])
+                write('shell-result.txt',p[1]..'\t'..(ok and ('Applied '..p[3]) or tostring(result)))
+            elseif p[2] == "collect-garbage" then
+                StaticFindObject('/Script/Engine.Default__KismetSystemLibrary'):CollectGarbage()
+                write('gc-result.txt',p[1]..'\tRequested full engine collection')
+            elseif p[2] == "reset" then pawn:ResetCar()
+            elseif p[2] == "export" then Export.start(pawn,p[3],write)
             elseif p[2] == "notice-test" then UI.PreviewUpdateNotice()
             elseif p[2] == "menu" then UI.Open()
             elseif p[2] == "dump" then
@@ -335,11 +365,12 @@ local function update()
     local state=read("ui-state.tsv") or ""
     local heartbeat=tonumber(state:match("time\t(%d+)")) or 0
     local contactKey=state:match("contact%-key\t([^\r\n]+)")
-    if contactKey and os.time()-heartbeat<=4 and state:find("physics-build\t3c46a39f90",1,true) and now>=(adapter.physicsRetry or 0) then
+    if contactKey and os.time()-heartbeat<=4 and state:find("physics-build\t1801ffbdfe",1,true) and now>=(adapter.physicsRetry or 0) then
         local ok,result=pcall(Physics.capture,pawn,adapter,StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),now,contactKey,run,read,write)
         if ok then physics=result; write("contact-error.txt","")
         else write("contact-error.txt",tostring(result)); adapter.physicsRetry=now+5 end
     end
+    Damage.update(pawn,StaticFindObject("/Script/Engine.Default__KismetMathLibrary"),run,write)
     write("local." .. tostring(sequence % 2) .. ".tsv", string.format(
         "RRC1\t%s\t%d\t%s\t%.9g\t%.9g\t%.9g\t%.9g\t%.9g\t%.9g\t%s\t%s\t%d\n",
         run, sequence, currentLevel, position.X, position.Y, position.Z,

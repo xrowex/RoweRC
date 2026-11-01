@@ -26,9 +26,11 @@ public sealed class SteamSession : IDisposable
     private string localAppearanceRevision = "";
     private AppearanceChunk[] localAppearanceChunks = [];
     private long lastAppearanceRead;
+    private CarDamage? localDamage;
+    private long lastDamageRead;
     private long metricStart = Environment.TickCount64;
     private int ticksMeasured, posesSent;
-    private readonly ContactWorld contactWorld = new();
+    private readonly ContactWorld contactWorld;
     private long localFrameAt;
     private (string Run, long Seq) physicsFrame;
     public LobbyBrowser? Browser { get; private set; }
@@ -48,6 +50,7 @@ public sealed class SteamSession : IDisposable
     public Func<MapEntry, bool>? CanLoadMap { get; set; }
     public SteamSession(GameBridge bridge, Func<string, MapEntry?> findMap, Func<string, MapEntry?>? findLevel = null)
     {
+        contactWorld = new(bridge.DirectoryPath);
         this.bridge = bridge; this.findMap = findMap; this.findLevel = findLevel;
         log = new(bridge.DirectoryPath);
         created = CallResult<LobbyCreated_t>.Create(OnCreated);
@@ -93,7 +96,7 @@ public sealed class SteamSession : IDisposable
         callbacks.Add(Callback<LobbyDataUpdate_t>.Create(r => {
             if (InLobby && r.m_ulSteamIDLobby == lobby.m_SteamID && !Hosting) FollowHostState();
         }));
-        SetStatus($"Steam connected as {Persona} — mod 0.1.5, App ID {appId}");
+        SetStatus($"Steam connected as {Persona} — mod 0.1.6, App ID {appId}");
     }
     public void Host(MapEntry selected, bool isPublic = false)
     {
@@ -135,7 +138,7 @@ public sealed class SteamSession : IDisposable
         // a new level path with an old hash/epoch from separate metadata callbacks.
         var metadata = new Dictionary<string, string> {
             ["rrc_mod"] = "rowerc", ["rrc_protocol"] = Protocol.Version.ToString(),
-            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.5",
+            ["rrc_build"] = MapCatalog.SupportedBuild, ["rrc_version"] = "0.1.6",
             ["rrc_access"] = publicHost ? "public" : "friends",
             ["name"] = Persona + "'s RC Tandems" };
         foreach (var (key, value) in metadata) if (!SteamMatchmaking.SetLobbyData(lobby, key, value)) return false;
@@ -153,7 +156,7 @@ public sealed class SteamSession : IDisposable
         if (next == null)
         {
             SteamMatchmaking.LeaveLobby(joined);
-            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.5 or later."); return;
+            SetStatus("Host has an incompatible mod. Both players must update to RoweRC 0.1.6 or later."); return;
         }
         var selected = findMap(next.Content);
         if (selected == null || !next.SameMap(selected))
@@ -279,6 +282,22 @@ public sealed class SteamSession : IDisposable
             peer.LastAppearanceChunk = now;
             if (error.Length == 0) { peer.NextAppearanceChunk++; peer.AppearanceSentAt = now; }
         }
+        if(local!=null && now-lastDamageRead>200)
+        {
+            lastDamageRead=now;
+            try
+            {
+                var path=Path.Combine(bridge.DirectoryPath,"damage.tsv");
+                var next=File.Exists(path)&&new FileInfo(path).Length<1024?CarDamage.Read(File.ReadAllText(path)):null;
+                if(next?.Run==local.Run && next!=localDamage){localDamage=next;foreach(var peer in peers.Values)peer.LastDamageSent=0;}
+            }catch(IOException){}
+        }
+        if(localDamage?.Run==local?.Run && localDamage!=null)
+            foreach(var peer in peers.Values.Where(p=>now-p.LastDamageSent>1000))
+            {
+                Send(peer,new PeerEnvelope(Protocol.Version,state.Room,state.Epoch,state.Content,"damage",state.Level,true,null,Damage:localDamage).Encode(),peer.Route(now),true);
+                peer.LastDamageSent=now;
+            }
         if (local != null && lastFrame != (local.Run, local.Sequence))
         {
             var bytes = PeerEnvelope.Pose(state, local).Encode();
@@ -302,7 +321,7 @@ public sealed class SteamSession : IDisposable
             }
         }
         bridge.WriteRemotes(peers.Values.Where(p => p.HasCar(now)).Select(p => new RemoteCar(p.Id,
-            SteamFriends.GetFriendPersonaName(new(p.Id)), p.Car!, p.CarReceivedAt, p.Appearance.Current)));
+            SteamFriends.GetFriendPersonaName(new(p.Id)), p.Car!, p.CarReceivedAt, p.Appearance.Current, p.Damage)));
         UpdateStatus(now); LogSnapshot(local, now);
     }
     private void Send(PeerLink peer, byte[] bytes, PeerRoute route, bool reliable)
@@ -343,7 +362,7 @@ public sealed class SteamSession : IDisposable
         var now = Environment.TickCount64;
         var name = SteamFriends.GetFriendPersonaName(new(peer.Id));
         if (peer.HasCar(now)) return $"{name}: {(peer.PingMs >= 0 ? $"{peer.PingMs} ms ping, " : "")}{peer.ArrivalJitterMs:F0} ms arrival jitter, {peer.SourceHz:F0} updates/s"
-            + (Collisions ? peer.Car?.Physics == null ? " | contact: update to 0.1.5 / preparing collider" : peer.Car.Physics.Driving ? " | contact ready" : " | car paused" : "");
+            + (Collisions ? peer.Car?.Physics == null ? " | contact: update to 0.1.6 / preparing collider" : peer.Car.Physics.Driving ? " | contact ready" : " | car paused" : "");
         if (peer.PacketsReceived > 0 && !peer.Ready) return $"{name}: loading host's map";
         if (peer.SendError.Length > 0) return name + ": " + peer.SendError;
         if (peer.PacketsReceived > 0) return name + ": connection ready, waiting for car updates";

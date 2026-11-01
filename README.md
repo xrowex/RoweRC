@@ -1,86 +1,61 @@
-# RoweRC for RC Tandems — experimental prototype
+# RoweRC 0.1.6 for RC Tandems
 
-Steam friends lobbies and custom-map loading for the **Epic Windows build `3c46a39f90`**, Unreal Engine 5.7. All normal controls are inside the game: press **F8** for Friends + Maps. The Steam helper starts in the background with the mod.
+Steam lobbies, custom shells and experimental car contact for the Epic Windows RC Tandems **v2.2.5 / build `1801ffbdfe`**, Unreal Engine 5.7.4. Press **F8** for Online, Car and Maps. The Steam helper starts in the background with the game.
 
-## What works locally
+## Install or upgrade
 
-- The runtime loader starts in the installed game and exports live car poses.
-- The F8 menu renders in the game; its mouse buttons can create and leave a real friends-only Steam lobby and show its code.
-- Loading the host's selected built-in level works.
-- A simulated remote pose feed renders a separate car made from 80 visible car components.
-- A real two-PC session received the host's car over Steam Networking Messages on Tandyz; the guest confirmed the car was visible. Local logs recorded 1,985 accepted car updates and matching host/guest map paths without a connection error.
-- The Steam browser discovers a real public RoweRC lobby. Friends-only rooms use a separate Steam friends lookup.
-- A local native peer fixture swaps to a Toyota Supra body, applies independent red paint and different rims across 80 components while the local car retains its purple paint. Moving wheel transforms, nonzero remote motor volume/pitch and peer cleanup were also checked. The complete 29,880-byte snapshot validates and reassembles from 17 reliable chunks.
-- The 0.1.3 cold-asset loading fix resolved the real two-PC missing 180SX body/chassis report: all 80/80 parts loaded, and the guest confirmed the body visible. Complete visual replacement now waits for all assets.
-- In the real 0.1.4 session, the local log measured about 29–31 received poses/s and 119 render updates/s with no prediction in the sampled window. The user still reported remote-car jitter. Version 0.1.5 adds cubic heading interpolation, smaller packets, visible Steam ping and arrival-jitter measurements; subjective smoothness is still awaiting another two-PC check.
-- The 0.1.5 local native contact fixture extracted a 350Z body outline and four tire outlines (88 points). Its 2,346-byte network packet fit the transport limit, and a computed contact changed the real car's motion and was acknowledged once. This fixture uses a simulated other car; it does not verify two-PC impacts.
-- 85 standalone checks cover packets, maps, updates, appearance, contact geometry and impulse handling. Lua checks cover smoothing (19), appearance (6) and the native contact adapter (8). All six runtime Lua modules parse under Lua 5.4.
+1. Update RC Tandems in Epic to the supported build. Close RC Tandems and wait for RoweRC to exit.
+2. Download and extract **RoweRC-prototype-0.1.6.zip** from the release.
+3. Open PowerShell 7 in the extracted `RoweRC` folder and run `./Install.ps1`. Use `-GameFolder 'C:\Your\RCTandems'` for a different location. The installer checks the game build and existing file receipts before copying files; it preserves your settings.
+4. Restart the game and open **F8 → Car** to select the Pickup or Supra RC shell and adjust rim metallic.
 
-**Not yet verified:** two-PC physical contacts, high-latency contact feel, wheel/audio details across two PCs, host map changes with a connected guest, sustained smooth tandem driving, and a newly cooked custom map. Multiplayer remains experimental.
+**The upgrade from 0.1.5 requires this full installer.** The 0.1.5 updater accepts the previous game build and cannot install the new shell containers. The new updater includes support for the six owned shell files in future updates.
+
+For a clean unmodded install, you can also copy the complete `InstallFiles/RCDriftSim` tree into the game root beside `RCDriftSim.exe`. Keep the loader, `ue4ss`, helper files and all six shell files together. For an existing mod installation, use the installer to detect conflicts.
 
 ## Play with a friend
 
-1. Both players install the same prototype onto the supported RC Tandems build. Steam must be running and signed in on separate accounts.
-2. Launch RC Tandems normally. Press **F8**.
-3. The host selects a track and clicks **Host friends-only track**, or **Host public track** to appear in the public browser. Reopen F8 after map travel to see the code, then use **Copy lobby code**. The host can change the lobby map without making everyone leave.
-4. The friend can click **Refresh Steam lobbies** and join a listed room, or paste the code and click **Join friend's lobby — follow host map**. Guests do not select a map. The host's map loads automatically and guests follow subsequent changes.
-5. Close F8 to drive. The mod requests the game's ResumeDrive action after a map load; the native **Drive / Enter** shortcut remains available if needed.
+Both players need the same RoweRC version, game build and cooked shell files, with Steam running on separate accounts.
 
-The current default is Valve's **Spacewar development App ID 480**. Steam may show Spacewar as running. This is a development transport test, not an RC Tandems Steam release or production App ID. An authorized App ID can be configured in `RCDriftSim/Binaries/Win64/RoweRC/settings.json`; both players must use the same ID.
+- **Online:** Host friends or Host public, browse public lobbies, or enter a friend's lobby code. Copy the code yourself; the mod does not send invitations.
+- **Maps:** Choose and load the track. The host controls maps; guests follow automatically. Load custom map ZIPs using Reload custom maps.
+- **Car:** Select Pickup shell, Supra RC or Use game shell. Your native body color is retained. Rim metallic runs from 0 to 1 and can be restored to the game finish.
 
-## Install
+Close F8 and enter Drive. Steam transport uses development App ID 480, so Steam may display Spacewar. Both players must use the same App ID. The host can enable experimental car contact from Online; contact starts off in each new lobby.
 
-Close the game. In the extracted distribution, run `./Install.ps1` with PowerShell 7; it locates the Epic installation and checks for file conflicts before copying anything. Use `-GameFolder 'C:\Your\RCTandems'` if needed. For a clean unmodded installation, you can instead copy the package's `InstallFiles/RCDriftSim` folder into the game root beside `RCDriftSim.exe`, merging directories. Keep the full `ue4ss` and `RoweRC` folders together with `dwmapi.dll` in `Binaries/Win64`.
+## Deformation
 
-No Steam friend invitations are sent automatically. Share the lobby code yourself.
+Cosmetic shell denting is included. Acknowledged mod car-contact impulses can dent the paint/body section; Reset Car repairs it, and changing shells clears its dents. Up to four dents are retained, each capped at 0.8 cm with a 1.2 cm total displacement limit. The wheel and chassis collision shapes remain unchanged. Wall-impact deformation is not connected in this release.
 
-Each player drives with the game's local physics. Car contact is off by default; the host can enable experimental contact in F8 when both players have **0.1.5**. Version 0.1.2 adds stock body/chassis meshes, body and rim colors, rim/tire selections, wheel steering/rotation and the six native motor-audio layers. Appearance snapshots refresh when visible choices change, use independent materials per peer and are acknowledged over reliable Steam transport. From 0.1.4, remote visuals update on engine frames, with cubic body interpolation, quaternion rotation blending, a monotonic playout clock, an adaptive 120–240 ms buffer and at most 100 ms of positional prediction; car resets clear the buffer. Version 0.1.5 also smooths upright heading velocity and removes duplicated bridge/debug properties from network JSON. Older peers can exchange visual poses but cannot participate in physical contact.
+Pickup and Supra geometry, dent application and repair are checked locally. Dent state is included in reliable peer messages and accepts the custom-shell namespace. Real two-PC shell/dent visuals and impacts still need playtesting.
 
-## Experimental car contact (0.1.5)
+## Shells and maps
 
-After both players update, the host opens F8 and selects **Toggle experimental car contact (host)**. Both players close F8 and enter Drive. The peer line shows whether its collider is ready or its car is paused. Enabling contact can briefly pause the game while it extracts and caches the selected body's mesh outline; an unsupported mesh is reported in F8.
+The Pickup and Supra RC shells are included as matching `.pak`, `.utoc` and `.ucas` triples under `RCDriftSim/Content/Paks/~mods/RoweRC/Shells`. Both peers install these locally; lobbies do not download models, textures or sounds. See [CUSTOM_SHELLS.md](CUSTOM_SHELLS.md).
 
-The collider follows a convex outline derived from the actual body vertices plus four independently transformed tire cylinders. Contact follows the native game's upright XY-plane simulation: this is a projected body/wheel footprint, not a full 3D triangle-mesh solver, deformation, climbing or tumbling. The current contact model uses equal nominal 1.5 kg cars and geometry-derived yaw inertia. Body concavities are filled by the convex hull.
+Custom tracks must be cooked for UE 5.7 and use the documented package layout. See [CUSTOM_MAPS.md](CUSTOM_MAPS.md). No newly cooked track is included in this release.
 
-The host uses fresh physical snapshots, short bounded prediction and swept contact samples rather than the delayed visual interpolation poses. Relative velocity at the impact point determines equal/opposite impulses, yaw torque and limited sliding friction. Each owner applies its delta to the verified native simulation, with acknowledgements and run/reset/epoch/freshness guards. High latency still delays delivery and can separate the apparent impact from its response; transatlantic bumping needs real playtesting. This is not a replacement for a server-authoritative native driving simulation with rollback.
+## Validation and limits
 
-F8 displays Steam round-trip ping, received source cadence and arrival jitter. Ping is measured delay; arrival jitter also includes scheduling and packet delivery variation. A UK peer alone does not establish the cause of visible jitter. Logs add connection quality, sequence gaps and interpolation headroom under `%LOCALAPPDATA%/RoweRC/bridge`.
+The two-shell UE 5.7.4 cook completed with zero errors and warnings. Local checks cover the three menu tabs, shell/material loading, rim finish, stock restoration, cosmetic dent geometry and reset, and repeated shell changes through forced garbage collection. The shell-switching asset-cache crash is fixed by reacquiring Unreal assets after unload. Backend and Lua checks cover packets, materials, damage, updates, physics adapters and smoothing.
 
-Only stock `/Game/Vehicle` assets, declarative collider outlines and material overrides are replicated; there are no downloaded models, textures or sounds. Chat, voice, synchronized AI, host migration, and automatic map downloads are not implemented. Native map travel can initialize the game's default car; cosmetic/tune persistence across raw level travel still needs validation.
+Multiplayer remains experimental. Two-PC custom-shell/dent visuals, physical impacts, high-latency contact feel and sustained tandem smoothness are not accepted yet. The host's native pair solver sends bounded, acknowledged responses to each owner; driving physics remains local. Latency can separate an apparent impact from its response. Prior two-PC testing established basic stock-car visibility and Steam traffic, not acceptance of this release's new features.
 
-## Automatic updates (0.1.1 onward)
+## Updates and diagnostics
 
-Both players must install **0.1.1 once** to replace the original 0.1.0 prototype. The original 0.1.0 wire protocol is incompatible. Versions 0.1.1 and 0.1.2 share the pose protocol; the new visual features require 0.1.2 on both PCs.
+After installing this release, F8 → Maps → Check for mod update requests the signed feed. An update installs after the game and helper close. Update receipts/backups are under `%LOCALAPPDATA%/RoweRC/updates`.
 
-The helper checks a signed GitHub release feed at startup and every 10 minutes while running. From 0.1.3, a non-interactive banner appears over the game once an update is downloaded and scheduled, telling you to close and reopen RC Tandems; F8 also shows its status. A newer compatible mod is downloaded and SHA-256 checked, then installed after both RC Tandems and the helper have closed. Update signatures use a pinned RSA public key. The updater backs up replaced mod files, restores them after an interrupted installation, and never updates the base game, tuning, settings, maps or other mods.
-
-F8 shows update status and includes **Check for mod update**. Set `AutoUpdate` to `false` in `RoweRC/settings.json` to disable startup checks. Update results and backups are under `%LOCALAPPDATA%/RoweRC/updates`. The signed feed is live at `https://github.com/xrowex/RoweRC/releases/latest/download/update.json`; the installed 0.1.1 helper successfully verified it and reported that the mod was up to date. The original 0.1.1 updater subsequently downloaded the public signed 0.1.2 package, waited for game/helper exit, installed all eight payload files and wrote a successful 0.1.2 receipt.
-
-## Connection diagnostics
-
-Reliable handshakes now continue while a map is loading. The primary Steam Networking Messages route has a legacy Steam P2P fallback. F8 distinguishes a connecting peer, a peer loading the host map, an actual send error, and a car whose updates are arriving. Detailed counters, map paths and Steam connection errors are written to `%LOCALAPPDATA%/RoweRC/bridge/session.log`. Base 0.1.0 hid send failures and discarded packets during map mismatch; the user's real two-PC attempt exposed that gap. In the 0.1.1 retry, the guest received and visibly rendered the host's car through the primary Messages route. The legacy fallback has not yet been verified across two PCs.
-
-## Custom maps
-
-Put a compatible map ZIP in `%LOCALAPPDATA%/RoweRC/Maps/Inbox`, open F8, and click **Reload custom maps**. Successful imports are checked, installed under the game's `Content/Paks/~mods/RoweRC`, and added to the track list. Restart the game after importing new cooked content. Everyone must have the identical package to exchange car updates.
-
-Maps must be cooked for **Unreal 5.7**, use `/Game/RoweRCMaps/<map_id_with_underscores>/...`, and include a `map.json` plus the listed `.pak`/`.utoc`/`.ucas` files at the archive root. Ordinary FBX, Unity maps, and arbitrary maps from other games are not compatible packages. See [CUSTOM_MAPS.md](CUSTOM_MAPS.md) for the authoring format and pack tool. No custom track is included or claimed tested.
+Runtime logs are `%LOCALAPPDATA%/RoweRC/bridge/session.log`, `error.txt`, `damage-error.txt` and `remote-appearance-error.txt`, plus `RCDriftSim/Binaries/Win64/ue4ss/UE4SS.log`. Helper startup errors use `%LOCALAPPDATA%/RoweRC/startup-error.txt`.
 
 ## Build
 
-Requires .NET SDK 9 and the pinned dependencies recorded in [THIRD_PARTY.md](THIRD_PARTY.md).
+Restore the pinned dependencies in [THIRD_PARTY.md](THIRD_PARTY.md). Extract the six release shell files into `ShellPacks`, or provide their folder explicitly:
 
 ```powershell
-dotnet publish src/RoweRC/RoweRC.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o dist/RoweRC
+./Build.ps1 -ShellPackFolder 'C:\CookedShellFiles'
 dotnet src/RoweRC/bin/Release/net9.0-windows/win-x64/RoweRC.dll --self-test
 python tests/check_lua.py
+python tools/package.py
 ```
 
-`RoweRC.exe --desktop` opens the optional developer diagnostics window. Normal launches use the in-game menu. `--steam-smoke-test` creates and leaves a development lobby; it does not test a second player.
-
-## Troubleshooting / removal
-
-Read `%LOCALAPPDATA%/RoweRC/bridge/session.log`, `%LOCALAPPDATA%/RoweRC/bridge/error.txt` and `RCDriftSim/Binaries/Win64/ue4ss/UE4SS.log`. A helper startup failure is logged to `%LOCALAPPDATA%/RoweRC/startup-error.txt`.
-
-To disable the mod, close the game and move the added `dwmapi.dll` out of `RCDriftSim/Binaries/Win64`. To remove this clean installation, also remove the added `ue4ss` and `RoweRC` directories, and any installed custom map folders under `~mods/RoweRC`. Preserve other mods if you merge this into an existing modded installation. Game executable and base content archives are not patched.
-
+`ShellPacks/manifest.json` pins the cooked files' hashes. Source FBXs, extracted stock assets, authoring projects, caches and private signing keys are excluded from the source release.

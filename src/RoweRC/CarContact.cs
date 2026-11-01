@@ -36,14 +36,14 @@ public readonly record struct ContactVector(double X, double Y)
 }
 
 public sealed record ContactImpulse(long Sequence, string Run, long Generation, double Time,
-    double X, double Y, double Dvx, double Dvy, double Dw)
+    double X, double Y, double Dvx, double Dvy, double Dw, double Dpx = 0, double Dpy = 0)
 {
     [JsonIgnore] public bool Valid => Sequence > 0 && Run is { Length: > 0 and <= 64 } && Run.All(c => char.IsAsciiLetterOrDigit(c) || c is '-' or '_') && Generation >= 0
-        && new[] { Time, X, Y, Dvx, Dvy, Dw }.All(double.IsFinite) && Time >= 0
-        && Math.Abs(X) < 1e8 && Math.Abs(Y) < 1e8 && Dvx * Dvx + Dvy * Dvy <= 16.001 && Math.Abs(Dw) <= 10;
+        && new[] { Time, X, Y, Dvx, Dvy, Dw, Dpx, Dpy }.All(double.IsFinite) && Time >= 0
+        && Math.Abs(X) < 1e8 && Math.Abs(Y) < 1e8 && Dvx * Dvx + Dvy * Dvy <= 16.001 && Math.Abs(Dw) <= 10 && Dpx*Dpx+Dpy*Dpy <= .0004;
     [JsonIgnore] public string Tsv => string.Join('\t', new[] { Sequence.ToString(), Run, Generation.ToString(), Time.ToString("R", CultureInfo.InvariantCulture),
         X.ToString("R", CultureInfo.InvariantCulture), Y.ToString("R", CultureInfo.InvariantCulture),
-        Dvx.ToString("R", CultureInfo.InvariantCulture), Dvy.ToString("R", CultureInfo.InvariantCulture), Dw.ToString("R", CultureInfo.InvariantCulture) });
+        Dvx.ToString("R", CultureInfo.InvariantCulture), Dvy.ToString("R", CultureInfo.InvariantCulture), Dw.ToString("R", CultureInfo.InvariantCulture), Dpx.ToString("R", CultureInfo.InvariantCulture), Dpy.ToString("R", CultureInfo.InvariantCulture) });
 }
 
 public static class ContactGeometry
@@ -52,7 +52,7 @@ public static class ContactGeometry
     // projected outlines; never accepts an arbitrary physics command or asset.
     public static ContactVector[][]? Parse(string? text)
     {
-        if (text is null || text.Length is < 12 or > 1700) return null;
+        if (text is null || text.Length is < 12 or > 2300) return null;
         var polygons = text.Split(';'); if (polygons.Length is < 1 or > 5) return null;
         var result = new List<ContactVector[]>(); var total = 0;
         foreach (var polygon in polygons)
@@ -66,7 +66,7 @@ public static class ContactGeometry
                     || !double.IsFinite(x) || !double.IsFinite(y) || Math.Abs(x) > 1 || Math.Abs(y) > 1) return null;
                 points.Add(new(x, y));
             }
-            if (points.Count is < 3 or > 32 || (total += points.Count) > 96) return null;
+            if (points.Count is < 3 or > 48 || (total += points.Count) > 128) return null;
             double area = 0, sign = 0;
             for (var i = 0; i < points.Count; i++)
             {
@@ -103,6 +103,13 @@ public static class ContactGeometry
             }
         return (normal, depth);
     }
+    public static bool Overlaps(ContactVector pa, double ya, ContactVector[][] sa, ContactVector pb, double yb, ContactVector[][] sb)
+    {
+        if ((pb-pa).Length > 2) return false;
+        var a=sa.Select(p=>Transform(p,pa,ya)).ToArray(); var b=sb.Select(p=>Transform(p,pb,yb)).ToArray();
+        return a.Any(x=>b.Any(y=>Intersect(x,y,pb-pa)!=null));
+    }
+    // Reference approximation for regression fixtures only. Production calls the game's solver.
     public static (ContactVector A, double Wa, ContactVector B, double Wb)? Solve(
         ContactVector pa, double ya, ContactVector va, double wa, double ma, double ia, ContactVector[][] sa,
         ContactVector pb, double yb, ContactVector vb, double wb, double mb, double ib, ContactVector[][] sb)

@@ -4,7 +4,7 @@ import hashlib,math,os,pathlib,time,sys
 bridge=pathlib.Path(os.environ['LOCALAPPDATA'])/'RoweRC/bridge'
 state=(bridge/'ui-state.tsv').read_text(encoding='utf-8')
 if 'role\tidle' not in state: raise RuntimeError('Leave the real lobby before running the local fixture')
-external=len(sys.argv)>2
+external=len(sys.argv)>2 and not sys.argv[2].startswith("--")
 original=pathlib.Path(sys.argv[2]).read_text(encoding='utf-8') if external else (bridge/'appearance.tsv').read_text(encoding='utf-8')
 local_run=(bridge/'local.1.tsv').read_text().split('\t')[1]
 header=original.splitlines()[0].split('\t'); header[1]=local_run
@@ -31,7 +31,7 @@ try:
             (bridge/('appearance.'+peer+'.tsv')).write_bytes(snapshot.encode())
         choices=[p for p in (bridge/'local.0.tsv',bridge/'local.1.tsv') if p.exists()]
         parts=max(choices,key=lambda p:p.stat().st_mtime).read_text().strip().split('\t')
-        if len(parts)!=12: continue
+        if len(parts) not in (12,13): continue
         pose=list(map(float,parts[4:10])); pose[0]+=70+10*math.sin(i/30)
         motion=list(map(float,parts[10].split(',')))
         if len(motion)!=67: raise RuntimeError('New native animation frame is required')
@@ -42,6 +42,8 @@ try:
         motion[49:67]=[0,1,0]*6
         motion[52:55]=[.22,1+.2*math.sin(i/40),1]
         fields=[peer]+[str(v) for v in pose]+[parts[1],str(i),','.join(str(v) for v in motion),revision]
+        body=next((row.split('\t')[3] for row in snapshot.splitlines() if row.startswith('p\t') and row.split('\t')[2]=='OptionalBodyShell'),'')
+        fields+=['Steam name test','1',body,'-1.0000:0.0000:0.6000' if '--damage' in sys.argv else '']
         pending=bridge/'remote-fixture.tmp'
         pending.write_bytes(('RRC1\n# fixture-%d\n'%i+'\t'.join(fields)+'\n').encode())
         try: pending.replace(bridge/'remote.tsv')

@@ -145,9 +145,9 @@ internal sealed class BackendContext : ApplicationContext
     {
         foreach (var (relative, expected) in new Dictionary<string, string> {
             ["RCDriftSim/Binaries/Win64/RCDriftSim-Win64-Shipping.exe"] = MapCatalog.SupportedExe,
-            ["RCDriftSim/Content/Paks/RCDriftSim-Windows.pak"] = "e68b7f9d286144e3bb11b126de4d41b7da39d02d4350c04df7effeb4eed178d6",
-            ["RCDriftSim/Content/Paks/RCDriftSim-Windows.ucas"] = "1763c13792579a8cfdb3c7c35f309f40040f2ee7db74174d2d2ee972a18aaccb",
-            ["RCDriftSim/Content/Paks/RCDriftSim-Windows.utoc"] = "84d22f27ea135daa65dd7411164dbda83f3e9f68196294d2502ed040ce0d98f7" })
+            ["RCDriftSim/Content/Paks/RCDriftSim-Windows.pak"] = "d8776af84340861259e2993416e6d5725562ef6a531fbe3041744e8bc4c8038b",
+            ["RCDriftSim/Content/Paks/RCDriftSim-Windows.ucas"] = "90737f1f7ed6c3c9fde218135ea214a71bbad563d5a786aede630904cfa5bf8b",
+            ["RCDriftSim/Content/Paks/RCDriftSim-Windows.utoc"] = "8ed6ab38ce80a7e3848ebe424e4fdf792f2d9a63ffadaf29eda31c8ca094fd60" })
         {
             var path = Path.Combine(settings.GameFolder, relative);
             if (!File.Exists(path) || MapCatalog.Hash(path) != expected) throw new InvalidDataException("Unsupported RC Tandems build: " + relative);
@@ -157,7 +157,7 @@ internal sealed class BackendContext : ApplicationContext
     {
         static string Clean(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var status = lastError.Length > 0 ? lastError : steam.Connected ? steam.Status : "Ready. Host or join to connect Steam.";
-        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.5\n");
+        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.6\n");
         text.Append("contact\t").Append(steam.Collisions ? "1" : "0").Append('\n');
         text.Append("contact-key\t").Append(steam.ContactKey).Append('\n');
         text.Append("physics-build\t").Append(steam.Collisions ? MapCatalog.SupportedBuild : "").Append('\n');

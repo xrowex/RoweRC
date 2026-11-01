@@ -12,8 +12,8 @@ if (!$GameFolder) {
 }
 $gameRoot = [IO.Path]::GetFullPath($GameFolder).TrimEnd('\')
 $exe = Join-Path $gameRoot 'RCDriftSim\Binaries\Win64\RCDriftSim-Win64-Shipping.exe'
-if (!(Test-Path -LiteralPath $exe) -or (Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne '5269616427df15ffc507970aa290193fddd60f83b7807231067455aa1a292dab') {
-    throw 'This installer requires RC Tandems build 3c46a39f90.'
+if (!(Test-Path -LiteralPath $exe) -or (Get-FileHash -LiteralPath $exe).Hash.ToLowerInvariant() -ne '08da7cc9ca54d8f11dc05f70de7f33ed38014b33a82d2ccb4beb7f033592b4cf') {
+    throw 'This installer requires RC Tandems build 1801ffbdfe.'
 }
 if (Get-Process -Name 'RCDriftSim-Win64-Shipping' -ErrorAction SilentlyContinue) { throw 'Close RC Tandems before installing.' }
 if (Get-Process -Name 'RoweRC' -ErrorAction SilentlyContinue) { throw 'Wait for the RoweRC helper to exit after closing the game.' }
@@ -46,6 +46,6 @@ foreach ($f in $incoming) {
     }
     $files[$f.Relative] = (Get-FileHash -LiteralPath $f.Target).Hash.ToLowerInvariant()
 }
-@{Version='0.1.5-experimental'; GameBuild='3c46a39f90'; InstalledUtc=[DateTime]::UtcNow.ToString('o'); Files=$files} |
+@{Version='0.1.6'; GameBuild='1801ffbdfe'; InstalledUtc=[DateTime]::UtcNow.ToString('o'); Files=$files} |
     ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $receiptPath -Encoding utf8
 Write-Output 'RoweRC installed. Launch RC Tandems normally and press F8 for Friends + Maps.'
