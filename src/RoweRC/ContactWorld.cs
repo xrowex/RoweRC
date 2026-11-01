@@ -43,6 +43,9 @@ public sealed class ContactWorld(string? nativeDirectory = null, bool referenceF
         for (var i = 0; i < bodies.Count; i++) for (var j = i + 1; j < bodies.Count; j++)
         {
             var a = bodies[i]; var b = bodies[j];
+            // Cars on different road decks must not collide through the floor.
+            // Pose Z is the supported road height in centimetres.
+            if (Math.Abs(a.Input.Frame.Pose.Z - b.Input.Frame.Pose.Z) > 12) continue;
             var pair = a.Input.Id < b.Input.Id ? (a.Input.Id, b.Input.Id) : (b.Input.Id, a.Input.Id);
             if (now - lastContact.GetValueOrDefault(pair, long.MinValue / 2) < 100) continue;
             previous.TryGetValue(a.Input.Id, out var oldA); previous.TryGetValue(b.Input.Id, out var oldB);

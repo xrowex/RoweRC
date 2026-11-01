@@ -154,6 +154,7 @@ void solve() {
     atomic(root/L"native-response.tsv",output.str()); atomic(root/L"native-error.txt","");
 }
 }
+bool RoweRCVerifySupportedGame() { static const bool supported=verifyGame(); return supported; }
 extern "C" __declspec(dllexport) int RoweRCNativeSolve(void*) {
     try {solve();} catch(const std::exception& e) {try {atomic(bridgeRoot()/L"native-error.txt",e.what());}catch(...) {}}
     return 0;

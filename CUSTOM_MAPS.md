@@ -42,6 +42,14 @@ The ID uses lowercase letters, digits and hyphens. Its Unreal directory replaces
 
 The loader validates manifest consistency and file hashes. It cannot prove from a hash that a cooked map has correct mount paths, collision, lighting, shaders, spawn behavior or engine compatibility. Those require an in-game acceptance test.
 
+### Native vehicle limits in the verified game build
+
+In RC Tandems 2.2.5 / build `1801ffbdfe`, the stock pawn converts its planar simulation coordinates to a world position with Z fixed at zero. Loading an elevated road with Unreal mesh collision does not make this pawn follow that road. The native recovery check also pauses driving when either simulation coordinate exceeds 18 metres from the origin, displaying `Arena boundary reached. Reset to recover.` This is a coordinate limit, rather than distance measured from the selected PlayerStart.
+
+RoweRC 0.1.8 adds a grounded adapter for `/Game/RoweRCMaps/apex_wangan/Tandyz_Overcast_With_APEX_Repaired`. It preserves the city's geometry, follows road height and banking, offsets the absolute camera by road height, resolves contacts against baked city geometry, and replaces the fixed arena limit for that pawn. Native attitude/lift recovery remains enabled. Stock maps retain their original pawn tick. This supplies grounded driving; airborne vehicle dynamics are not implemented. A missing support surface stops the car instead of snapping to a different road deck.
+
+The adapter's terrain file is embedded in the mod helper and is extracted and SHA-256 checked automatically. Both players need the matching mod and map: the city fingerprint includes its vehicle support profile. Geometry or placement changes require rebaking `tools/bake_apex_terrain.py` from the source FBX, updating the validated terrain hash, and repeating the driving checks. This experimental test release has passed local native height, camera, barrier and four-axis boundary probes; a full lap and two-player checks remain unverified.
+
 ## Build a distribution ZIP
 
 Put only the cooked payload containers into a folder, then run the supplied helper with the following arguments. It generates the manifest and SHA-256 values and writes the ZIP; it does not cook assets.

@@ -29,6 +29,7 @@ internal sealed class BackendContext : ApplicationContext
             var installedRoot = Path.GetFullPath(Path.Combine(root, "../../../.."));
             settings = settings with { GameFolder = File.Exists(Path.Combine(installedRoot, "RCDriftSim.exe")) ? installedRoot : @"C:\Program Files\Epic Games\RCTandemszQS5H" };
         }
+        TerrainSupport.EnsureInstalled(settings.GameFolder);
         bridge = new(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RoweRC", "bridge"));
         bridge.WriteRemotes([]);
         requestSeen = ReadRequest()?.FirstOrDefault() ?? "";
@@ -131,6 +132,7 @@ internal sealed class BackendContext : ApplicationContext
     private void VerifyMap(MapEntry map)
     {
         VerifyGame();
+        TerrainSupport.Verify(settings.GameFolder, map.Manifest.Level);
         if (map.BuiltIn) return;
         if (needsRestart.TryGetValue(map.Fingerprint, out var pid) && Process.GetProcessesByName("RCDriftSim-Win64-Shipping").Any(p => p.Id == pid))
             throw new InvalidOperationException("Restart RC Tandems to mount this newly imported map.");

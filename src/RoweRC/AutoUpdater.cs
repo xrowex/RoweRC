@@ -13,7 +13,7 @@ public sealed record PendingUpdate(string GameFolder, string Package, string Fee
 
 public sealed class AutoUpdater
 {
-    public const string CurrentVersion = "0.1.7";
+    public const string CurrentVersion = "0.1.8";
     public const string DefaultFeed = "https://github.com/xrowex/RoweRC/releases/latest/download/update.json";
     private readonly string gameFolder, feedUrl;
     private readonly string root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "RoweRC", "updates");
@@ -105,6 +105,7 @@ public sealed class AutoUpdater
     public static bool AllowedPath(string relative) => relative.StartsWith("RCDriftSim/Binaries/Win64/ue4ss/Mods/RoweRC/Scripts/", StringComparison.Ordinal)
         && relative.EndsWith(".lua", StringComparison.Ordinal) && !relative.Contains("..") && !relative.Contains('\\')
         || new[] { "RoweRC.exe", "bootstrap.dll", "steam_api64.dll" }.Any(name => relative == "RCDriftSim/Binaries/Win64/RoweRC/" + name)
+        || relative == "RCDriftSim/Binaries/Win64/RoweRC/Terrain/apex-wangan.rrcterrain"
         || ShellPayloadPaths.Contains(relative, StringComparer.Ordinal);
 
     public static void Apply(string pendingPath)

@@ -55,7 +55,19 @@ internal static class SelfTest
             void Save(MapManifest m) => File.WriteAllText(Path.Combine(mapFolder, "map.json"), JsonSerializer.Serialize(m));
             Save(manifest);
             var entry = MapCatalog.Validate(mapFolder);
+            var terrainGame=Path.Combine(temp,"terrain-game");
+            TerrainSupport.EnsureInstalled(terrainGame);TerrainSupport.Verify(terrainGame,TerrainSupport.Level);
+            var terrainFile=Path.Combine(terrainGame,"RCDriftSim/Binaries/Win64/RoweRC/Terrain/apex-wangan.rrcterrain");
+            Check(MapCatalog.Hash(terrainFile)==TerrainSupport.DataSha256,"helper extracts and verifies its bundled city terrain");
+            File.WriteAllText(terrainFile,"corrupt local terrain");TerrainSupport.EnsureInstalled(terrainGame);
+            Check(MapCatalog.Hash(terrainFile)==TerrainSupport.DataSha256&&Directory.GetFiles(Path.GetDirectoryName(terrainFile)!,"*.previous-*").Length==1,
+                "terrain restoration verifies replacement and preserves the changed previous file");
             Check(entry.Fingerprint.Length == 64, "map content fingerprint");
+            var cityManifest=manifest with { Id="apex-wangan",Level=TerrainSupport.Level };
+            Save(cityManifest);
+            var legacyCityText=$"RRCMAP1\n{cityManifest.Id}\n{cityManifest.Version}\n{cityManifest.Engine}\n{cityManifest.Level}\nTrack_P.pak:{cityManifest.Files["Track_P.pak"]}\n";
+            var legacyCityHash=Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(legacyCityText))).ToLowerInvariant();
+            Check(MapCatalog.Validate(mapFolder).Fingerprint!=legacyCityHash,"city fingerprint rejects clients using the previous flat vehicle simulation");
             Save(manifest with { Name = "Different display name" });
             Check(MapCatalog.Validate(mapFolder).Fingerprint == entry.Fingerprint, "display metadata does not change map compatibility");
             Save(manifest with { Version = "2.0" });
@@ -209,6 +221,13 @@ internal static class SelfTest
             Check(firstHits.Length==2 && firstHits[0].Hit.Sequence==firstHits[1].Hit.Sequence
                 && !world.Step([new(1,bodyA,0),new(2,bodyB,0)],1008).Any(), "one host event updates both owners and suppresses repeat impulses before acknowledgement");
             Check(!world.Step([new(1,bodyA,.3),new(2,bodyB,.3)],1200).Any(), "stale physical states cannot create contacts");
+            var deckWorld=new ContactWorld(referenceForTests:true);
+            Check(AutoUpdater.AllowedPath("RCDriftSim/Binaries/Win64/RoweRC/Terrain/apex-wangan.rrcterrain")
+                && !AutoUpdater.AllowedPath("RCDriftSim/Binaries/Win64/RoweRC/Terrain/../bootstrap.dll"),"updater allows only the named city terrain payload");
+            Check(!deckWorld.Step([new(1,bodyA,0),new(2,bodyB with { Pose=bodyB.Pose with { Z=30 } },0)],1000).Any(),
+                "overlapping cars on separate road decks do not collide through the floor");
+            Check(new ContactWorld(referenceForTests:true).Step([new(1,bodyA,0),new(2,bodyB with { Pose=bodyB.Pose with { Z=2 } },0)],1000).Count()==2,
+                "nearby cars still collide across small road height differences");
             var sweptWorld=new ContactWorld(referenceForTests:true);
             var fastCar=bodyA with { Pose=bodyA.Pose with { X=-49 },Physics=physics with { Vx=24.5 } };
             var stationary=bodyB with { Pose=bodyB.Pose with { X=0 } };

@@ -107,6 +107,8 @@ public sealed class MainForm : Form
     }
     private void EnsureMapAvailable(MapEntry map)
     {
+        TerrainSupport.EnsureInstalled(game.Text.Trim());
+        TerrainSupport.Verify(game.Text.Trim(), map.Manifest.Level);
         VerifyGame();
         if (map.BuiltIn) return;
         var current = MapCatalog.Validate(map.Folder);

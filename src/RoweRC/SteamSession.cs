@@ -160,7 +160,7 @@ public sealed class SteamSession : IDisposable
         if (selected == null || !next.SameMap(selected))
         {
             SteamMatchmaking.LeaveLobby(joined);
-            SetStatus($"Host's map '{next.MapId}' is missing or a different version. Install that map, then join again."); return;
+            SetStatus($"Host's map '{next.MapId}' or vehicle support differs. Install the matching map and RoweRC update, then join again."); return;
         }
         try { CheckMap(selected); }
         catch (Exception e) { SteamMatchmaking.LeaveLobby(joined); SetStatus("Host's map is unavailable: " + e.Message); return; }

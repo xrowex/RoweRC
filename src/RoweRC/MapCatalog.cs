@@ -52,6 +52,8 @@ public static partial class MapCatalog
         if (m.Files.Keys.Any(n => n.EndsWith(".utoc", StringComparison.OrdinalIgnoreCase)
             && !names.Contains(Path.ChangeExtension(n, ".ucas")))) throw new InvalidDataException("An IoStore .utoc needs its matching .ucas.");
         if (!m.Files.Keys.Any(n => n.EndsWith(".pak", StringComparison.OrdinalIgnoreCase))) throw new InvalidDataException("Map package needs a .pak.");
+        // Older flat-physics clients must not join this city's grounded session.
+        if (m.Level == TerrainSupport.Level) canonical.Append("vehicle:").Append(TerrainSupport.Profile).Append('\n');
         return new(m, Path.GetFullPath(folder), Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(canonical.ToString()))).ToLowerInvariant(), false);
     }
     public static List<MapEntry> Load(string root, out List<string> errors)

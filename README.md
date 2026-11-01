@@ -1,15 +1,19 @@
-# RoweRC 0.1.7 for RC Tandems
+# RoweRC 0.1.8 for RC Tandems
+
+Experimental APEX city test release: grounded road height and banking, city obstacle contacts, and matching camera height. Local boundary and camera checks passed; a full city lap and two-PC acceptance remain unverified.
 
 Steam lobbies, custom shells and experimental car contact for the Epic Windows RC Tandems **v2.2.5 / build `1801ffbdfe`**, Unreal Engine 5.7.4. Press **F8** for Online, Car and Maps. The Steam helper starts in the background with the game.
 
 ## Install or upgrade
 
 1. Update RC Tandems in Epic to the supported build. Close RC Tandems and wait for RoweRC to exit.
-2. Download and extract **RoweRC-prototype-0.1.7.zip** from the release.
+2. Download and extract **RoweRC-prototype-0.1.8.zip** from the release.
 3. Open PowerShell 7 in the extracted `RoweRC` folder and run `./Install.ps1`. Use `-GameFolder 'C:\Your\RCTandems'` for a different location. The installer checks the game build and existing file receipts before copying files; it preserves your settings.
 4. Restart the game and open **F8 → Car** to select the Pickup or Supra RC shell and adjust rim metallic.
 
-**The upgrade from 0.1.5 requires this full installer.** The 0.1.5 updater accepts the previous game build and cannot install the new shell containers. The new updater includes support for the six owned shell files. Existing 0.1.6 users can use the signed updater for 0.1.7.
+**The upgrade from 0.1.5 requires this full installer.** Existing 0.1.6 and 0.1.7 users can use the signed F8 updater, then close the game to install. The new helper carries and automatically extracts its verified terrain support, so the older updater does not need to install a new file type.
+
+Download **APEX-Wangan-1.0.0-test.4.zip** separately from the same release. Keep the ZIP intact and copy it to `%LOCALAPPDATA%/RoweRC/Maps/Inbox`. In **F8 → Maps**, click **Reload custom maps**, restart RC Tandems, select **APEX Wangan City**, then choose **Load / change host map**. Both players need the mod update and the same map ZIP.
 
 For a clean unmodded install, you can also copy the complete `InstallFiles/RCDriftSim` tree into the game root beside `RCDriftSim.exe`. Keep the loader, `ue4ss`, helper files and all six shell files together. For an existing mod installation, use the installer to detect conflicts.
 
@@ -31,7 +35,7 @@ Car-to-car contact stays available in Online. Cosmetic dent generation, procedur
 
 The Pickup and Supra RC shells are included as matching `.pak`, `.utoc` and `.ucas` triples under `RCDriftSim/Content/Paks/~mods/RoweRC/Shells`. Both peers install these locally; lobbies do not download models, textures or sounds. See [CUSTOM_SHELLS.md](CUSTOM_SHELLS.md).
 
-Custom tracks must be cooked for UE 5.7 and use the documented package layout. See [CUSTOM_MAPS.md](CUSTOM_MAPS.md). No newly cooked track is included in this release.
+Custom tracks must be cooked for UE 5.7 and use the documented package layout. See [CUSTOM_MAPS.md](CUSTOM_MAPS.md). The APEX city is a separate map download; it is not installed by the mod updater.
 
 ## Validation and limits
 
