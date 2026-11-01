@@ -1,15 +1,15 @@
-# RoweRC 0.1.6 for RC Tandems
+# RoweRC 0.1.7 for RC Tandems
 
 Steam lobbies, custom shells and experimental car contact for the Epic Windows RC Tandems **v2.2.5 / build `1801ffbdfe`**, Unreal Engine 5.7.4. Press **F8** for Online, Car and Maps. The Steam helper starts in the background with the game.
 
 ## Install or upgrade
 
 1. Update RC Tandems in Epic to the supported build. Close RC Tandems and wait for RoweRC to exit.
-2. Download and extract **RoweRC-prototype-0.1.6.zip** from the release.
+2. Download and extract **RoweRC-prototype-0.1.7.zip** from the release.
 3. Open PowerShell 7 in the extracted `RoweRC` folder and run `./Install.ps1`. Use `-GameFolder 'C:\Your\RCTandems'` for a different location. The installer checks the game build and existing file receipts before copying files; it preserves your settings.
 4. Restart the game and open **F8 → Car** to select the Pickup or Supra RC shell and adjust rim metallic.
 
-**The upgrade from 0.1.5 requires this full installer.** The 0.1.5 updater accepts the previous game build and cannot install the new shell containers. The new updater includes support for the six owned shell files in future updates.
+**The upgrade from 0.1.5 requires this full installer.** The 0.1.5 updater accepts the previous game build and cannot install the new shell containers. The new updater includes support for the six owned shell files. Existing 0.1.6 users can use the signed updater for 0.1.7.
 
 For a clean unmodded install, you can also copy the complete `InstallFiles/RCDriftSim` tree into the game root beside `RCDriftSim.exe`. Keep the loader, `ue4ss`, helper files and all six shell files together. For an existing mod installation, use the installer to detect conflicts.
 
@@ -23,11 +23,9 @@ Both players need the same RoweRC version, game build and cooked shell files, wi
 
 Close F8 and enter Drive. Steam transport uses development App ID 480, so Steam may display Spacewar. Both players must use the same App ID. The host can enable experimental car contact from Online; contact starts off in each new lobby.
 
-## Deformation
+## Collision only
 
-Cosmetic shell denting is included. Acknowledged mod car-contact impulses can dent the paint/body section; Reset Car repairs it, and changing shells clears its dents. Up to four dents are retained, each capped at 0.8 cm with a 1.2 cm total displacement limit. The wheel and chassis collision shapes remain unchanged. Wall-impact deformation is not connected in this release.
-
-Pickup and Supra geometry, dent application and repair are checked locally. Dent state is included in reliable peer messages and accepts the custom-shell namespace. Real two-PC shell/dent visuals and impacts still need playtesting.
+Car-to-car contact stays available in Online. Cosmetic dent generation, procedural-mesh updates and dent replication have been removed. Shells stay rigid during impacts. Both bundled shells use offline collision outlines, so contact mode does not extract their high-poly render meshes while driving.
 
 ## Shells and maps
 
@@ -37,15 +35,15 @@ Custom tracks must be cooked for UE 5.7 and use the documented package layout. S
 
 ## Validation and limits
 
-The two-shell UE 5.7.4 cook completed with zero errors and warnings. Local checks cover the three menu tabs, shell/material loading, rim finish, stock restoration, cosmetic dent geometry and reset, and repeated shell changes through forced garbage collection. The shell-switching asset-cache crash is fixed by reacquiring Unreal assets after unload. Backend and Lua checks cover packets, materials, damage, updates, physics adapters and smoothing.
+The two-shell UE 5.7.4 cook completed with zero errors and warnings. Local checks cover the three menu tabs, shell/material loading, rim finish, stock restoration and repeated shell changes through forced garbage collection. The shell-switching asset-cache crash is fixed by reacquiring Unreal assets after unload. Backend and Lua checks cover packets, materials, collision-only updates, physics adapters and smoothing.
 
-Multiplayer remains experimental. Two-PC custom-shell/dent visuals, physical impacts, high-latency contact feel and sustained tandem smoothness are not accepted yet. The host's native pair solver sends bounded, acknowledged responses to each owner; driving physics remains local. Latency can separate an apparent impact from its response. Prior two-PC testing established basic stock-car visibility and Steam traffic, not acceptance of this release's new features.
+Multiplayer remains experimental. Two-PC custom-shell visuals, physical impacts, high-latency contact feel and sustained tandem smoothness are not accepted yet. The host's native pair solver sends bounded, acknowledged responses to each owner; driving physics remains local. Latency can separate an apparent impact from its response. Prior two-PC testing established basic stock-car visibility and Steam traffic, not acceptance of this release's new features.
 
 ## Updates and diagnostics
 
 After installing this release, F8 → Maps → Check for mod update requests the signed feed. An update installs after the game and helper close. Update receipts/backups are under `%LOCALAPPDATA%/RoweRC/updates`.
 
-Runtime logs are `%LOCALAPPDATA%/RoweRC/bridge/session.log`, `error.txt`, `damage-error.txt` and `remote-appearance-error.txt`, plus `RCDriftSim/Binaries/Win64/ue4ss/UE4SS.log`. Helper startup errors use `%LOCALAPPDATA%/RoweRC/startup-error.txt`.
+Runtime logs are `%LOCALAPPDATA%/RoweRC/bridge/session.log`, `error.txt`, `contact-error.txt` and `remote-appearance-error.txt`, plus `RCDriftSim/Binaries/Win64/ue4ss/UE4SS.log`. Helper startup errors use `%LOCALAPPDATA%/RoweRC/startup-error.txt`.
 
 ## Build
 

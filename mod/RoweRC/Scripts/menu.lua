@@ -246,7 +246,7 @@ function UI.Update()
     end
     local text = read("ui-state.tsv")
     local time=tonumber(text:match("time\t(%d+)")) or 0
-    if previewUntil and os.time()<previewUntil then updateNotice("0.1.6",true)
+    if previewUntil and os.time()<previewUntil then updateNotice("0.1.7",true)
     else updateNotice(os.time()-time<=4 and text:match("update%-ready\t([^\r\n]*)") or nil) end
     if not UI.open or not valid(root) then return end
     shellLabel:SetText(FText("Shell: "..(Shells.error or Shells.status or 'Game shell')))

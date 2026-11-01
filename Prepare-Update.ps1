@@ -1,5 +1,5 @@
 #requires -Version 7.0
-param([string]$Version = '0.1.6', [string]$Repository = 'xrowex/RoweRC')
+param([string]$Version = '0.1.7', [string]$Repository = 'xrowex/RoweRC')
 $ErrorActionPreference = 'Stop'
 if ($Version -notmatch '^\d+\.\d+\.\d+$' -or $Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid version or repository.' }
 $stage = Join-Path $PSScriptRoot 'dist\RoweRC\InstallFiles'
@@ -31,7 +31,7 @@ try {
         Version=$Version; GameBuild='1801ffbdfe'; Size=(Get-Item -LiteralPath $output).Length
         Url="https://github.com/$Repository/releases/download/v$Version/update-$Version.zip"
         Sha256=(Get-FileHash -LiteralPath $output).Hash.ToLowerInvariant()
-        Notes='Pickup and Supra shells, Online/Car/Maps tabs, rim metallic control, cosmetic shell dents and shell-switch crash fix. Upgrading from 0.1.5 requires the full installer and RC Tandems build 1801ffbdfe.'
+        Notes='Collision-only hotfix: removes cosmetic dent geometry and dent replication; bundled shells use offline collision outlines to avoid high-poly scanning during play. Both players should install 0.1.7.'
     } | ConvertTo-Json -Compress
     $bytes = [Text.Encoding]::UTF8.GetBytes($payload)
     $signature = $rsa.SignData($bytes, [Security.Cryptography.HashAlgorithmName]::SHA256, [Security.Cryptography.RSASignaturePadding]::Pss)

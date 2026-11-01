@@ -1,7 +1,6 @@
 -- Locally installed UE5.7 shells. Meshes/materials replicate by asset path;
 -- each peer needs the matching cooked pack before starting the game.
 local M={options={{id='optional_shell',name='Pickup shell'},{id='supra_rc',name='Supra RC'}}}
-local Damage=require('damage')
 local Assets=require('vehicle_assets')
 local selected,state='stock',nil
 local path=(os.getenv('LOCALAPPDATA') or '.')..'/RoweRC/shell.txt'
@@ -49,7 +48,6 @@ local function apply(pawn,id)
     if source.StaticMesh:GetAddress()~=package.mesh:GetAddress() then
         -- A native body change establishes the new stock fallback and body transform.
         if not asset(source.StaticMesh):find('/Game/Vehicle/RoweRC/Shells/',1,true) then remember(pawn,source) end
-        Damage.reset()
         assert(source:SetStaticMesh(package.mesh),'Could not apply shell mesh')
         for slot=0,math.max(source:GetNumMaterials(),#state.materials,#package.materials)-1 do source:SetMaterial(slot,package.materials[slot+1] or package.materials[1]) end
         local paint=source:CreateDynamicMaterialInstance(0,package.materials[1],FName('None'))
@@ -71,7 +69,6 @@ function M.select(pawn,id)
     assert(id=='stock' or definition(id),'Unknown shell');M.error=nil
     if id=='stock' then
         if state and valid(state.source) and state.pawn==pawn:GetAddress() then
-            Damage.reset()
             assert(state.source:SetStaticMesh(state.mesh),'Could not restore game shell')
             for slot=0,math.max(state.source:GetNumMaterials(),#state.materials)-1 do state.source:SetMaterial(slot,state.materials[slot+1]) end
             state.source:K2_SetRelativeTransform(state.transform,false,{},true)

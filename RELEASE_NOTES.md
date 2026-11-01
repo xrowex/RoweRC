@@ -1,13 +1,9 @@
-# RoweRC 0.1.6 — shells, cleaner menu and cosmetic dents
+# RoweRC 0.1.7 � collision only
 
-Both players can select the new **Pickup** and **Supra RC** shells from **F8 → Car**. The release includes all six cooked shell files, a saved rim-metallic slider, native-shell restoration, and a menu split into **Online / Car / Maps**. Shells retain the game's body color and the game retains local driving physics.
+Removes cosmetic dents following collision-time lag reports: contacts no longer copy shell geometry, construct procedural meshes, deform vertices or replicate dents. Both bundled shells use mesh outlines extracted offline, so enabling contact avoids reflecting 301,383 Supra vertices into Lua. The Pickup and Supra shells, Online/Car/Maps menu and rim-metallic slider remain included.
 
-**Upgrade instructions:** update Epic RC Tandems to v2.2.5 / build `1801ffbdfe`, close the game, extract `RoweRC-prototype-0.1.6.zip`, and run `RoweRC/Install.ps1` in PowerShell 7. **Upgrading from 0.1.5 requires the full installer** because its updater only accepts the old game build and cannot install shell containers. The shell files are included in the archive; the new updater supports these files for future releases.
+Both players should install 0.1.7. Existing 0.1.6 users can use the signed F8 updater, then close the game to install. Alternatively close the game, extract RoweRC-prototype-0.1.7.zip and run RoweRC/Install.ps1 using PowerShell 7. Upgrades from 0.1.5 require the full installer. Supported Epic RC Tandems: v2.2.5 / build 1801ffbdfe, UE 5.7.4.
 
-Cosmetic denting is included for body paint sections. Mod car-contact impulses can add dents; Reset Car repairs them. Dents do not alter wheel/chassis collision shapes. Wall impacts are not connected to deformation. Custom-shell dent messages now pass validation for reliable peer replication.
+Car-to-car contact remains experimental and starts off in each new lobby; the host enables it in Online. Native driving stays local. Two-PC impact feel and sustained smoothness require playtesting; the earlier access-violation reports are still under investigation. This hotfix removes the expensive deformation path, without claiming that every crash is resolved.
 
-The shell-switching crash caused by retaining an Unreal asset wrapper after its mesh could unload is fixed. The corrected build passed 14 native shell changes and six forced garbage collections, with stock restoration working. Both shells cooked under UE 5.7.4 with zero errors and warnings and loaded in the installed game. Native deformation and reset checks, managed packet/updater checks and Lua lifecycle checks were also run.
-
-Experimental contact uses the game's pinned native pair solver with actual mass/inertia, an upright body footprint and four tire shapes. Contact starts off and can be enabled by the host in Online. Native car contact, cosmetic dents and Steam names are included, but real two-PC impacts and custom-shell/dent visuals remain unverified. No newly cooked custom track is included.
-
-Steam transport still uses development App ID 480. Both peers need this same release and the supported game build.
+Validation: 99 backend checks and 11 Lua collision checks passed. Six native solver-to-owner contacts (three on each shell) were acknowledged in an empty test lobby without a crash. This is a local fixture, not two-PC acceptance.

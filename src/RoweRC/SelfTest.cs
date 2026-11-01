@@ -103,7 +103,7 @@ internal static class SelfTest
             Check(PeerEnvelope.Read(PeerEnvelope.Pose(advertised, invalidMotion).Encode(), advertised) == null, "network rejects malformed animation instead of passing it to Unreal");
             bridge.WriteRemotes([new(42, "friend", animatedCar, 0)]);
             var remoteLine = File.ReadAllLines(Path.Combine(bridge.DirectoryPath, "remote.tsv"))[2].Split('\t');
-            Check(remoteLine.Length == 15 && remoteLine[8] == hostCar.Sequence.ToString() && CarMotion.Read(remoteLine[9])?.Valid == true,
+            Check(remoteLine.Length == 12 && remoteLine[8] == hostCar.Sequence.ToString() && CarMotion.Read(remoteLine[9])?.Valid == true,
                 "remote bridge preserves sequence and complete wheel/audio payload for smoothing");
             var appearanceText = "RRA1\trun-1\t1\np\t1\tBody\t/Game/Vehicle/Test/Body.Body\t0\t0,0,0,0,0,0,1,1,1,1,1,1\nm\t1\t0\t/Game/Vehicle/Test/Paint.Paint\nv\t1\t0\tBodyColor\t0.8,0.1,0.2,1\nend\t1\t1\n";
             var appearance = CarAppearance.Read(appearanceText);
@@ -231,7 +231,7 @@ internal static class SelfTest
             Check(dentPeer.Damage?.Dents=="","newer reset clears a remote shell's dents");
             var namesBridge=new GameBridge(Path.Combine(temp,"names"));namesBridge.WriteRemotes([new(1,"Friend\t\r\n😀",contactCar,0,Damage:dent)]);
             var remoteFields=File.ReadAllLines(Path.Combine(namesBridge.DirectoryPath,"remote.tsv"))[^1].Split('\t');
-            Check(remoteFields.Length==15 && remoteFields[11]=="Friend😀" && remoteFields[14]==dent.Dents,"Steam names retain Unicode and cannot inject bridge fields");
+            Check(remoteFields.Length==12 && remoteFields[11]=="Friend😀","Steam names retain Unicode and legacy dents are excluded from the game bridge");
             var signedFeed = File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "signed-update-fixture.json"));
             Check(AutoUpdater.Verify(signedFeed).Version == "9.9.9", "update signature is verified with the pinned public key");
             var signed = JsonSerializer.Deserialize<SignedUpdate>(signedFeed)!;

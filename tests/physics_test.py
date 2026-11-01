@@ -5,6 +5,7 @@ lua=LuaRuntime(unpack_returned_tuples=True)
 lua.execute("package.path='mod/RoweRC/Scripts/?.lua;'..package.path")
 lua.execute(r'''
 RegisterCustomProperty=function() end; PropertyTypes={Int64Property={}}
+package.preload.damage=function()error('Collision mode must not load deformation')end
 local M=require('physics'); local checks=0
 local function check(ok,name) assert(ok,name); checks=checks+1; print('PASS: '..name) end
 local circle={}; for i=0,99 do circle[#circle+1]={math.cos(i*math.pi/50),math.sin(i*math.pi/50)} end
@@ -18,7 +19,9 @@ local function mesh(name,extent)
         GetNumSections=function() return 1 end,GetBounds=function() return {Origin={X=0,Y=0,Z=0},BoxExtent=extent} end}
 end
 local bodyMesh=mesh('body',{X=20,Y=10,Z=5}); local wheelMesh=mesh('wheel',{X=3,Y=2,Z=3})
+local scans=0
 StaticFindObject=function() return {GetSectionFromStaticMesh=function(_,m,lod,section,vertices)
+    scans=scans+1
     for _,p in ipairs({{-20,-10},{20,-10},{20,10},{-20,10}}) do local v={X=p[1],Y=p[2],Z=0}; vertices[#vertices+1]={get=function() return v end} end
 end} end
 local function component(m,x,y)
@@ -51,7 +54,19 @@ events='room-1\n9\trun-1\t1\t10\t100\t200\t1\t0\t1\n'; capture(10.4)
 check(get(0x7770)==0 and get(0x7780)==0,'reset generation rejects in-flight contact events')
 events='room-1\n10\trun-1\t2\t8\t100\t200\t1\t0\t1\n'; capture(10.5)
 check(get(0x7770)==0,'expired contact events are acknowledged without applying a late bump')
+local scanned=scans
+for i=11,30 do
+    events=string.format('room-1\n%d\trun-1\t2\t10\t100\t200\t0.01\t0\t0\n',i)
+    capture(10.55)
+end
+check(scans==scanned and package.loaded.damage==nil,'repeated contact applies no mesh scan or deformation work')
+for _,id in ipairs({'optional_shell','supra_rc'}) do
+    bodyMesh.GetFullName=function()return 'StaticMesh /Game/Vehicle/RoweRC/Shells/'..id..'/SM_'..id..'.SM_'..id end
+    local shape=capture(10.55)
+    check(scans==scanned and #shape<3000,'baked '..id..' collision avoids reflected high-poly geometry')
+end
 put(0x7758,99)
-check(not pcall(capture,10.6) and get(0x7770)==0,'native pose mismatch prevents all writes')
+local beforeMismatch=get(0x7770)
+check(not pcall(capture,10.6) and get(0x7770)==beforeMismatch,'native pose mismatch prevents all writes')
 print(checks..' physics adapter checks passed')
 ''')

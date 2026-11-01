@@ -135,8 +135,7 @@ public sealed class GameBridge
             }
             var name=string.Concat(c.Name.EnumerateRunes().Where(r=>!System.Text.Rune.IsControl(r)).Take(48));
             text.Append(c.Id).Append('\t').Append(c.Frame.Pose.Tsv).Append('\t').Append(c.Frame.Run).Append('\t').Append(c.Frame.Sequence)
-                .Append('\t').Append(c.Frame.Motion?.Tsv ?? "0").Append('\t').Append(revision).Append('\t').Append(name).Append('\t').Append(c.Damage?.Run==c.Frame.Run ? c.Damage.Revision : 0)
-                .Append('\t').Append(c.Damage?.Run==c.Frame.Run ? c.Damage.Mesh : "").Append('\t').Append(c.Damage?.Run==c.Frame.Run ? c.Damage.Dents : "").Append('\n');
+                .Append('\t').Append(c.Frame.Motion?.Tsv ?? "0").Append('\t').Append(revision).Append('\t').Append(name).Append('\n');
         }
         Atomic("remote.tsv", text.ToString());
     }

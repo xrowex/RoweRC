@@ -1,6 +1,5 @@
 -- Stock vehicle visuals and independent per-peer material instances.
 local M={}
-local Damage=require("damage")
 local Assets=require("vehicle_assets")
 local function valid(o) return o and o:IsValid() end
 local function name(o) return o:GetFullName():match("%.([^%.]+)$") or "" end
@@ -51,7 +50,7 @@ function M.capture(pawn,each,animation,adapter,mathLib,run,serial,previous,now)
     end
     for _,source in ipairs(adapter.visualSources) do
     if valid(source) then
-        if not source.bHiddenInGame and (source.bVisible or Damage.isSource(source)) and asset(source.StaticMesh) then
+        if not source.bHiddenInGame and source.bVisible and asset(source.StaticMesh) then
         local ancestor,onCar=source,false
         for _=1,20 do
             if not valid(ancestor) then break end

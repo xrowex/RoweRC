@@ -157,7 +157,7 @@ internal sealed class BackendContext : ApplicationContext
     {
         static string Clean(string s) => s.Replace('\t', ' ').Replace('\r', ' ').Replace('\n', ' ');
         var status = lastError.Length > 0 ? lastError : steam.Connected ? steam.Status : "Ready. Host or join to connect Steam.";
-        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t0.1.6\n");
+        var text = new StringBuilder($"time\t{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}\nstatus\t{Clean(status)}\ncode\t{steam.Code}\nactive\t{steam.ActiveMap?.Manifest.Id ?? ""}\nrole\t{steam.Role}\nversion\t{AutoUpdater.CurrentVersion}\n");
         text.Append("contact\t").Append(steam.Collisions ? "1" : "0").Append('\n');
         text.Append("contact-key\t").Append(steam.ContactKey).Append('\n');
         text.Append("physics-build\t").Append(steam.Collisions ? MapCatalog.SupportedBuild : "").Append('\n');
